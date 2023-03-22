@@ -1,4 +1,6 @@
 const io = require('socket.io-client')
+const mediasoupClient = require('mediasoup-client')
+
 
 const socket = io("/mediasoup") 
 
@@ -7,13 +9,15 @@ socket.on('connection-success' , ({ socketId }) => { //'connection-success' even
     document.querySelector('#socketID').textContent = 'socketID: '+socketId
 })
 
+let device
+
 let params = {
     //mediasoup params
 }
 
 const streamSuccess = async (stream)=>{ //success callback
     localVideo.srcObject = stream
-    const track = stream.getVideoTrack()[0]
+    const track = stream.getVideoTracks()[0]
     params = { //get video track add to params
         track,
         ...params
@@ -38,8 +42,32 @@ const getLocalStream = () => {
     })
 }
 
+//creat Device as https://mediasoup.org/documentation/v3/mediasoup-client/api/#Device
+//for listener 
+const createDevice = async()=>{
+  try{
+    device = new mediasoupClient.Device()
+
+    await device.load({
+      routerRtpCapabilities: rtpCapabilities
+    })
+    console.log('RTP Capabilities',rtpCapabilities)
+  }catch(error){
+    console.log(error)
+    if(error.name === 'UnsupportedError')
+      console.warn('browser not supported')
+  }
+}
+
+// after click button 2 getRtpCapabilities
+const getRtpCapabilities = ()=>{
+  socket.emit('getRtpCapabilities',(rtpCapabilities)=>{
+    console.log(`Router RTP Capabilities... ${rtpCapabilities}`)
+  })
+}
+
 btnLocalVideo.addEventListener('click', getLocalStream)
-// btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
+btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
 // btnDevice.addEventListener('click', createDevice)
 // btnCreateSendTransport.addEventListener('click', createSendTransport)
 // btnConnectSendTransport.addEventListener('click', connectSendTransport)

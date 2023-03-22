@@ -37,6 +37,7 @@ const peers = io.of('/mediasoup')
 //worker 
 
 let worker 
+
 //worker's RTCport
 const  createWorker = async()=>{
     worker = await mediasoup.createWorker({
@@ -75,7 +76,7 @@ let router
 
 //client connect & disconnect
 peers.on('connection' , async socket => { //'connection' event on peers
-    console.log('Connection Event from app.js'),
+    console.log('"Connection" Event from app.js'),
     console.log(socket.id)
     socket.emit('connection-success',{ //emit back 'connection-success' link to index.js
         socketId: socket.id
@@ -86,4 +87,13 @@ peers.on('connection' , async socket => { //'connection' event on peers
         console.log('peer disconnect')
     })
     router = await worker.createRouter({mediaCodecs})
+
+    // call from 'const getRtpCapabilities' from index.js
+    socket.on('getRtpCapabilities',(callback)=>{  
+        const rtpCapabilities = router.rtpCapabilities
+        console.log('"getRtpCapabilities" Event from app.js')
+        console.log('rtp Capabilities',rtpCapabilities)
+
+        callback({rtpCapabilities}) // call back for emit in index.js 
+    })
 })

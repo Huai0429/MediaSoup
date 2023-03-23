@@ -14,6 +14,7 @@ import e from 'express'
 import { send } from 'process'
 import { resolveObjectURL } from 'buffer'
 import { randomFillSync } from 'crypto'
+import { profile } from 'console'
 
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
@@ -111,6 +112,28 @@ peers.on('connection' , async socket => { //'connection' event on peers
             consumerTransport = await createWebRtcTransport(callback)
 
     })
+let producer
+    socket.on('transport-connect',async({dtlsParameters})=>{
+        console.log('DTLS PARAMS...',[dtlsParameters])
+        await producerTransport.connect({dtlsParameters})
+    })
+
+    socket.on('transport-produce',async({kind,rtpParameters,appData},callback)=>{
+        producer = await producerTransport.produce({
+            kind,
+            rtpParameters,    
+        })
+
+        console.log('Producer ID: ',producer.id,producer.kind)
+        producer.on('transportclose',()=>{
+            console.log('transport for this producer closed ')
+            producer.close()
+        })
+
+        callback({
+            id : producer.id
+        })
+    })
 })
 
 //producer transport
@@ -140,7 +163,7 @@ const createWebRtcTransport = async(callback)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
-        callback({
+        callback({ // callback to const createSendTranspor in index.js
             params:{
                 id: transport.id,
                 iceParameters: transport.iceParameters,
@@ -150,7 +173,7 @@ const createWebRtcTransport = async(callback)=>{
         })
 
         return transport
-      } catch(error){
+    }catch(error){
         console.log(error)
         callback({
             params:{

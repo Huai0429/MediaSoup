@@ -9,6 +9,11 @@ const __dirname = path.resolve()
 
 import {Server} from 'socket.io'
 import mediasoup from 'mediasoup'
+import { SocketAddress } from 'net'
+import e from 'express'
+import { send } from 'process'
+import { resolveObjectURL } from 'buffer'
+import { randomFillSync } from 'crypto'
 
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
@@ -96,4 +101,61 @@ peers.on('connection' , async socket => { //'connection' event on peers
 
         callback({rtpCapabilities}) // call back for emit in index.js 
     })
+
+    //call from const createSendTransport (button 3)
+    socket.on('createWebRtcTransport',async ({sender},callback)=>{
+        console.log(`Is this a sender request? ${sender}`)
+        if(sender)
+            producerTransport = await createWebRtcTransport(callback)
+        else 
+            consumerTransport = await createWebRtcTransport(callback)
+
+    })
 })
+
+//producer transport
+let producerTransport
+let consumerTransport
+//createWebRtcTransport
+const createWebRtcTransport = async(callback)=>{
+    try {
+        const webRtcTransport_options = {
+            listenIps:[
+                {
+                    ip: '127.0.0.1',
+                }
+            ],
+            enableUdp:true,
+            enableTcp:true,
+            preferUdp:true,
+        }
+        let transport = await router.createWebRtcTransport(webRtcTransport_options)
+        console.log(`Create WebRtc Transport id: ${transport.id}`)
+        transport.on('dtlsstatechange',dtlsState=>{
+            if(dtlsState=='closed'){
+                transport.close()
+            }
+        })
+
+        transport.on('close',()=>{
+            console.log('transport closed')
+        })
+        callback({
+            params:{
+                id: transport.id,
+                iceParameters: transport.iceParameters,
+                iceCandidates: transport.iceCandidates,
+                dtlsParameters: transport.dtlsParameters,
+            }
+        })
+
+        return transport
+      } catch(error){
+        console.log(error)
+        callback({
+            params:{
+                error:error
+            }
+        })
+    }
+}

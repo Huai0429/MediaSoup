@@ -51,7 +51,8 @@ const createDevice = async()=>{
     await device.load({
       routerRtpCapabilities: rtpCapabilities
     })
-    console.log('RTP Capabilities',rtpCapabilities)
+    console.log('Create Device')
+    console.log('RTP Capabilities',device.rtpCapabilities)
   }catch(error){
     console.log(error)
     if(error.name === 'UnsupportedError')
@@ -59,16 +60,19 @@ const createDevice = async()=>{
   }
 }
 
+let rtpCapabilities
+
 // after click button 2 getRtpCapabilities
 const getRtpCapabilities = ()=>{
-  socket.emit('getRtpCapabilities',(rtpCapabilities)=>{
-    console.log(`Router RTP Capabilities... ${rtpCapabilities}`)
+  socket.emit('getRtpCapabilities',(data)=>{
+    console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
+    rtpCapabilities = data.rtpCapabilities
   })
 }
 
 btnLocalVideo.addEventListener('click', getLocalStream)
 btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
-// btnDevice.addEventListener('click', createDevice)
+btnDevice.addEventListener('click', createDevice)
 // btnCreateSendTransport.addEventListener('click', createSendTransport)
 // btnConnectSendTransport.addEventListener('click', connectSendTransport)
 // btnRecvSendTransport.addEventListener('click', createRecvTransport)

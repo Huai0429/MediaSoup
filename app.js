@@ -92,7 +92,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
     socket.on('getRtpCapabilities',(callback)=>{  
         const rtpCapabilities = router.rtpCapabilities
         console.log('"getRtpCapabilities" Event from app.js')
-        console.log('rtp Capabilities',rtpCapabilities)
+        // console.log('rtp Capabilities',rtpCapabilities)
 
         callback({rtpCapabilities}) // call back for emit in index.js 
     })

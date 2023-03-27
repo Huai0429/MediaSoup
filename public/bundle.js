@@ -17880,6 +17880,7 @@ const createSendTransport=()=>{
     }
     document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport id: '+params.id
     console.log(params)
+    console.log('already create waiting for connect')
 
     //transport connect event for producer'
     //https://mediasoup.org/documentation/v3/communication-between-client-and-server/#creating-transports
@@ -17972,13 +17973,41 @@ const createRecvTransport = async()=>{
   })
 }
 
+
+const connectRecvTransport = async()=>{
+  await socket.emit('consume',{
+    rtpCapabilities:device.rtpCapabilities,
+  },async({params})=>{
+    if(params.error){
+      console.log(`Cannot Consume ${params.error}`)
+      return
+    }
+
+    console.log(params)
+    consumer = await consumerTransport.consume({
+      id:params.id,
+      producerId:params.producerId,
+      kind:params.kind,
+      rtpParameters:params.rtpParameters
+    })
+
+    const{track} = consumer
+    
+    remoteVideo.srcObject = new MediaStream([track])
+
+    socket.emit('consumer-resume')
+  })
+}
+
+
+
 btnLocalVideo.addEventListener('click', getLocalStream)
 btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
 btnDevice.addEventListener('click', createDevice)
 btnCreateSendTransport.addEventListener('click', createSendTransport)
 btnConnectSendTransport.addEventListener('click', connectSendTransport)
 btnRecvSendTransport.addEventListener('click', createRecvTransport)
-// btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
+btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
 
 
 

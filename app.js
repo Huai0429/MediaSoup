@@ -138,6 +138,46 @@ let producer
         console.log(`DTLS PARAMS:${dtlsParameters}`)
         await consumerTransport.connect({dtlsParameters})
     })
+    socket.on('consume',async({rtpCapabilities},callback)=>{
+        try{
+            if(router.canConsume({
+                producerId:producer.id,
+                rtpCapabilities,
+            })){
+                consumer = await consumerTransport.consume({
+                    producerId:producer.id,
+                    rtpCapabilities,
+                    paused:true,
+                })
+                consumer.on('transportclose',()=>{
+                    console.log('transport close from consumer')
+                })
+                consumer.on('producerclose',()=>{
+                    console.log('producer of consumer closed')
+                })
+                const params = {
+                    id:consumer.id,
+                    producerId:producer.id,
+                    kind:consumer.kind,
+                    rtpParameters:consumer.rtpParameters,
+                }
+
+                callback({params}) //because callback on index.js is an object
+            }
+
+        }catch(error){
+            console.log(error.message)
+            callback({
+                params:{
+                    error:error
+                }
+            })
+        }
+    })
+    socket.on('consumer-resume',async ()=>{//restart consumer's stream stop by 150 lines
+        console.log('consumer resume')
+        await consumer.resume()
+    })
 })
 
 
@@ -151,7 +191,8 @@ const createWebRtcTransport = async(callback)=>{
         const webRtcTransport_options = {
             listenIps:[
                 {
-                    ip: '127.0.0.1',
+                    ip:'0.0.0.0',//replace by relevant IP address
+                    announcedIp: '127.0.0.1',//host machine IP
                 }
             ],
             enableUdp:true,
@@ -180,6 +221,7 @@ const createWebRtcTransport = async(callback)=>{
 
         return transport
     }catch(error){
+        console.log('createWebRtcTransport wrong')
         console.log(error)
         callback({
             params:{

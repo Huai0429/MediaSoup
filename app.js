@@ -43,7 +43,7 @@ const peers = io.of('/mediasoup')
 //worker 
 
 let worker 
-
+let consumer
 //worker's RTCport
 const  createWorker = async()=>{
     worker = await mediasoup.createWorker({
@@ -134,7 +134,13 @@ let producer
             id : producer.id
         })
     })
+    socket.on('transport-recv-connect',async({dtlsParameters})=>{
+        console.log(`DTLS PARAMS:${dtlsParameters}`)
+        await consumerTransport.connect({dtlsParameters})
+    })
 })
+
+
 
 //producer transport
 let producerTransport

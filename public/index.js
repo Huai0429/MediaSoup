@@ -99,7 +99,7 @@ const createSendTransport=()=>{
       console.log(params.error)
       return
     }
-    document.querySelector('#WebRtc_Transport_id').textContent = 'WebRtc Transport id: '+params.id
+    document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport id: '+params.id
     console.log(params)
 
     //transport connect event for producer'
@@ -134,7 +134,7 @@ const createSendTransport=()=>{
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({id}) //callback to transport-produce or producer id 
-          document.querySelector('#Prducer_ID').textContent = 'Prducer ID: '+id
+          document.querySelector('#Producer_ID').textContent = 'Producer ID: '+id
         })
         
       }catch(error){
@@ -163,12 +163,42 @@ const connectSendTransport = async()=>{
   })
 }
 
+let consumerTransport 
+let consumer
+const createRecvTransport = async()=>{
+  await socket.emit('createWebRtcTransport',{sender:false},({params}) =>{
+    if(params.error){
+      console.log(params.error)
+      return
+    }
+    document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport id: '+params.id
+    console.log(params)
+
+    // create recv transport
+    consumerTransport = device.createRecvTransport(params)
+    consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
+      try{
+        //signal local DTLS parameters to the server side transport
+        await socket.emit('transport-recv-connect',{
+          // transportId:consumerTransport.id,
+          dtlsParameters,
+        })
+        //Tell transport that parameters were tansmitted
+        callback()
+      }catch(error){
+        //tell transport that something goes wrong
+        errback(error)
+      }
+    })
+  })
+}
+
 btnLocalVideo.addEventListener('click', getLocalStream)
 btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
 btnDevice.addEventListener('click', createDevice)
 btnCreateSendTransport.addEventListener('click', createSendTransport)
 btnConnectSendTransport.addEventListener('click', connectSendTransport)
-// btnRecvSendTransport.addEventListener('click', createRecvTransport)
+btnRecvSendTransport.addEventListener('click', createRecvTransport)
 // btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
 
 

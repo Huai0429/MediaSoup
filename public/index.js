@@ -3,13 +3,17 @@ const mediasoupClient = require('mediasoup-client')
 
 
 const socket = io("/mediasoup") 
-
+let device
+let rtpCapabilities
+let producerTransport
+let producer
+let consumerTransport 
+let consumer
 socket.on('connection-success' , ({ socketId }) => { //'connection-success' event
     console.log(socketId)
     document.querySelector('#socketID').textContent = 'socketID: '+socketId
 })
 
-let device
 
 let params = {
     //mediasoup params
@@ -80,8 +84,7 @@ const createDevice = async()=>{
   }
 }
 
-let rtpCapabilities
-let producerTransport
+
 // after click button 2 getRtpCapabilities
 const getRtpCapabilities = ()=>{
   socket.emit('getRtpCapabilities',(data)=>{
@@ -101,7 +104,7 @@ const createSendTransport=()=>{
     }
     document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport id: '+params.id
     console.log(params)
-    console.log('already create waiting for connect')
+    console.log('Create "Send Transport" Successful and waiting for connect')
 
     //transport connect event for producer'
     //https://mediasoup.org/documentation/v3/communication-between-client-and-server/#creating-transports
@@ -121,7 +124,6 @@ const createSendTransport=()=>{
         errback(error)
       }
     })
-
     producerTransport.on('produce',async(parameters,callback,errback)=>{
       console.log(parameters)
 
@@ -146,7 +148,6 @@ const createSendTransport=()=>{
 }
 
 //producer different from producer transport
-let producer
 
 const connectSendTransport = async()=>{
   producer = await producerTransport.produce(params) // produce connect-1
@@ -164,8 +165,7 @@ const connectSendTransport = async()=>{
   })
 }
 
-let consumerTransport 
-let consumer
+
 const createRecvTransport = async()=>{
   await socket.emit('createWebRtcTransport',{sender:false},({params}) =>{
     if(params.error){
@@ -175,6 +175,7 @@ const createRecvTransport = async()=>{
     document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport id: '+params.id
     console.log(params)
 
+    console.log('Create "Recv Transport" Successful and waiting for connect')
     // create recv transport
     consumerTransport = device.createRecvTransport(params)
     consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
@@ -200,6 +201,7 @@ const connectRecvTransport = async()=>{
     rtpCapabilities:device.rtpCapabilities,
   },async({params})=>{
     if(params.error){
+      console.log(`${device.rtpCapabilities}`)
       console.log(`Cannot Consume ${params.error}`)
       return
     }

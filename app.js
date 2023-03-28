@@ -16,6 +16,13 @@ import { resolveObjectURL } from 'buffer'
 import { randomFillSync } from 'crypto'
 import { profile } from 'console'
 
+let worker 
+let consumer
+let producer
+let router 
+let producerTransport
+let consumerTransport
+
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
 })
@@ -42,8 +49,7 @@ const peers = io.of('/mediasoup')
 
 //worker 
 
-let worker 
-let consumer
+
 //worker's RTCport
 const  createWorker = async()=>{
     worker = await mediasoup.createWorker({
@@ -78,7 +84,6 @@ const mediaCodecs = [
 ]
 
 //router
-let router 
 
 //client connect & disconnect
 peers.on('connection' , async socket => { //'connection' event on peers
@@ -92,13 +97,14 @@ peers.on('connection' , async socket => { //'connection' event on peers
         //do some clean up
         console.log('peer disconnect')
     })
-    router = await worker.createRouter({mediaCodecs})
+    router = await worker.createRouter({mediaCodecs,})
 
     // call from 'const getRtpCapabilities' from index.js
     socket.on('getRtpCapabilities',(callback)=>{  
+
         const rtpCapabilities = router.rtpCapabilities
         console.log('"getRtpCapabilities" Event from app.js')
-        // console.log('rtp Capabilities',rtpCapabilities)
+        // console.log(`rtp Capabilities${rtpCapabilities.codecs}`)
 
         callback({rtpCapabilities}) // call back for emit in index.js 
     })
@@ -112,7 +118,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
             consumerTransport = await createWebRtcTransport(callback)
 
     })
-let producer
+
     socket.on('transport-connect',async({dtlsParameters})=>{
         console.log('DTLS PARAMS...',[dtlsParameters])
         await producerTransport.connect({dtlsParameters})
@@ -140,6 +146,8 @@ let producer
     })
     socket.on('consume',async({rtpCapabilities},callback)=>{
         try{
+            console.log(`consume in app.js${producer.id}`)
+            // console.log(`${producer.id}`)
             if(router.canConsume({
                 producerId:producer.id,
                 rtpCapabilities,
@@ -166,6 +174,7 @@ let producer
             }
 
         }catch(error){
+            // console.log(`producer ID : ${producer.id}`)
             console.log(error.message)
             callback({
                 params:{
@@ -183,8 +192,7 @@ let producer
 
 
 //producer transport
-let producerTransport
-let consumerTransport
+
 //createWebRtcTransport
 const createWebRtcTransport = async(callback)=>{
     try {
@@ -210,6 +218,11 @@ const createWebRtcTransport = async(callback)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
+        console.log(`Before callback ${transport.id}`)
+        console.log(`${transport.iceParameters}`)
+        console.log(`${transport.iceCandidates}`)
+        console.log(`${transport.dtlsParameters}`)
+        // console.log(`${producer.id}`)
         callback({ // callback to const createSendTranspor in index.js
             params:{
                 id: transport.id,
@@ -221,7 +234,7 @@ const createWebRtcTransport = async(callback)=>{
 
         return transport
     }catch(error){
-        console.log('createWebRtcTransport wrong')
+        console.log('CreateWebRtcTransport wrong')
         console.log(error)
         callback({
             params:{

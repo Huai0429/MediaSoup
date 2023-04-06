@@ -17784,6 +17784,7 @@ const mediasoupClient = require('mediasoup-client')
 const socket = io("/mediasoup") 
 let device
 let rtpCapabilities
+let rtpCapabilities2
 let producerTransport
 let producer
 let consumerTransport 
@@ -17871,7 +17872,8 @@ const createDevice = async()=>{
     device = new mediasoupClient.Device()
 
     await device.load({
-      routerRtpCapabilities: rtpCapabilities
+      routerRtpCapabilities: rtpCapabilities,
+      router2RtpCapabilities: rtpCapabilities2
     })
     console.log('Create Device')
     console.log('Device RTP Capabilities',device.rtpCapabilities)
@@ -17891,9 +17893,10 @@ const createDevice = async()=>{
 const getRtpCapabilities = ()=>{
   socket.emit('CreateRoom',(data)=>{
     console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
+    console.log(`Router2 RTP Capabilities... ${data.rtpCapabilities2}`)
     // document.querySelector('#Rtp_Capabilities').textContent = 'Rtp Capabilities: '+data.rtpCapabilities
     rtpCapabilities = data.rtpCapabilities
-
+    rtpCapabilities2 = data.rtpCapabilities2
     //btn 3
     createDevice()
   })
@@ -17902,13 +17905,14 @@ const getRtpCapabilities = ()=>{
 const createSendTransport=()=>{
   console.log('Start to create Send Transport as WebRtc transport...')
 
-  socket.emit('createWebRtcTransport',{sender:true},({params})=>{
+  socket.emit('createWebRtcTransport',{sender:true,pipesender:true},({params})=>{
     if (params.error){
       console.log(params.error)
       return
     }
     document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport id: '+params.id
-    console.log(params)
+    console.log(params.id)
+    console.log(params.id2)
     console.log('Create "Send Transport" Successful and waiting for connect')
 
     //transport connect event for producer'

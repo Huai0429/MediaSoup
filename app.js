@@ -16,12 +16,18 @@ import { resolveObjectURL } from 'buffer'
 import { randomFillSync } from 'crypto'
 import { Console, profile } from 'console'
 
+const host_ip = "140.118.107.177"
+const rev_ip = "0.0.0.0"
 let worker 
 let consumer
 let producer
 let router 
+let router2
 let producerTransport
 let consumerTransport
+let RProducerTransport
+let RConsumerTransport
+
 
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
@@ -105,13 +111,17 @@ peers.on('connection' , async socket => { //'connection' event on peers
             router = await worker.createRouter({mediaCodecs,})
             console.log(`Router ID: ${router.id}`)
         }
+        if (router2 === undefined){
+            router2 = await worker.createRouter({mediaCodecs,})
+            console.log(`Router2 ID: ${router2.id}`)
+        }
         getRtpCapabilities(callback)
     })
 
     const getRtpCapabilities=(callback)=>{
         const rtpCapabilities = router.rtpCapabilities
-
-        callback({rtpCapabilities})// call back for emit in index.js
+        const rtpCapabilities2 = router2.rtpCapabilities
+        callback({rtpCapabilities,rtpCapabilities2})// call back for emit in index.js
     }
 
     // call from 'const getRtpCapabilities' from index.js
@@ -125,13 +135,17 @@ peers.on('connection' , async socket => { //'connection' event on peers
     // })
 
     //call from const createSendTransport (button 3)
-    socket.on('createWebRtcTransport',async ({sender},callback)=>{
+    socket.on('createWebRtcTransport',async ({sender,pipesender},callback)=>{
         console.log(`Is this a sender request? ${sender}`)
         if(sender)
-            producerTransport = await createWebRtcTransport(callback)
+            producerTransport = await createWebRtcTransport(callback,true)
         else 
-            consumerTransport = await createWebRtcTransport(callback)
-
+            consumerTransport = await createWebRtcTransport(callback,true)
+        if(pipesender){
+            RConsumerTransport = await createWebRtcTransport(callback,false)
+        }else{
+            RProducerTransport = await createWebRtcTransport(callback,false)
+        }
     })
 
     socket.on('transport-connect',async({dtlsParameters})=>{
@@ -150,7 +164,6 @@ peers.on('connection' , async socket => { //'connection' event on peers
             console.log('transport for this producer closed ')
             producer.close()
         })
-
         callback({
             id : producer.id
         })
@@ -207,23 +220,31 @@ peers.on('connection' , async socket => { //'connection' event on peers
 
 
 //producer transport
-
+let transport
+let transport2
 //createWebRtcTransport
-const createWebRtcTransport = async(callback)=>{
+const createWebRtcTransport = async(callback,mode)=>{
     try {
         const webRtcTransport_options = {
             listenIps:[
                 {
-                    ip:'0.0.0.0',//replace by relevant IP address
-                    announcedIp: '140.118.107.177',//host machine IP
+                    ip:rev_ip,//replace by relevant IP address
+                    announcedIp: host_ip,//host machine IP
                 }
             ],
             enableUdp:true,
             enableTcp:true,
             preferUdp:true,
         }
-        let transport = await router.createWebRtcTransport(webRtcTransport_options)
-        console.log(`Create WebRtc Transport id: ${transport.id}`)
+        
+        if(mode){
+            transport = await router.createWebRtcTransport(webRtcTransport_options)
+            console.log(`Create WebRtc Transport id: ${transport.id} on router`)
+        }
+        else{
+            transport2 = await router2.createWebRtcTransport(webRtcTransport_options)
+            console.log(`Create WebRtc Transport id: ${transport2.id} on router2`)
+        }
         transport.on('dtlsstatechange',dtlsState=>{
             if(dtlsState=='closed'){
                 transport.close()
@@ -233,18 +254,48 @@ const createWebRtcTransport = async(callback)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
-        callback({ // callback to const createSendTranspor in index.js
-            params:{
-                id: transport.id,
-                iceParameters: transport.iceParameters,
-                iceCandidates: transport.iceCandidates,
-                dtlsParameters: transport.dtlsParameters,
-            }
-        })
-
+        // console.log(`${transport.id}`)
+        if(!mode){
+            callback({
+                params:{
+                    id: transport.id,
+                    id2: transport2.id,
+                    iceParameters: transport.iceParameters,
+                    iceCandidates: transport.iceCandidates,
+                    dtlsParameters: transport.dtlsParameters,
+                }
+            })
+        }
+        
         return transport
     }catch(error){
         console.log('CreateWebRtcTransport wrong')
+        console.log(error)
+        callback({
+            params:{
+                error:error
+            }
+        })
+    }
+}
+const createPipeTransport = async(callback)=>{
+    try{
+        const PipeTransport_options = {
+            listenIp:[
+                {
+                    ip:"0.0.0.0",//replace by relevant IP address
+                    announcedIp: host_ip,//host machine IP
+                }
+            ],
+            enableSctp:true,
+            enableRtx:true,
+            enableSrtp:true,
+        }
+        let pipetransport = await router2.createPipeTransport(PipeTransport_options)
+        console.log(`Create Pipe transport ${pipetransport.id}`)
+        return pipetransport
+    }catch(error){
+        console.log('createPipeTransport got error')
         console.log(error)
         callback({
             params:{

@@ -146,7 +146,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
     })
     socket.on('consume',async({rtpCapabilities},callback)=>{
         try{
-            console.log(`consume in app.js${producer.id}`)
+            console.log(`consume in app.js ${producer.id}`)
             // console.log(`${producer.id}`)
             if(router.canConsume({
                 producerId:producer.id,
@@ -200,7 +200,7 @@ const createWebRtcTransport = async(callback)=>{
             listenIps:[
                 {
                     ip:'0.0.0.0',//replace by relevant IP address
-                    announcedIp: '127.0.0.1',//host machine IP
+                    announcedIp: '140.118.107.177',//host machine IP
                 }
             ],
             enableUdp:true,
@@ -218,11 +218,6 @@ const createWebRtcTransport = async(callback)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
-        console.log(`Before callback ${transport.id}`)
-        console.log(`${transport.iceParameters}`)
-        console.log(`${transport.iceCandidates}`)
-        console.log(`${transport.dtlsParameters}`)
-        // console.log(`${producer.id}`)
         callback({ // callback to const createSendTranspor in index.js
             params:{
                 id: transport.id,

@@ -17996,7 +17996,8 @@ const connectRecvTransport = async()=>{
     const{track} = consumer
     
     remoteVideo.srcObject = new MediaStream([track])
-
+    document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
+    document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId,
     socket.emit('consumer-resume')
   })
 }

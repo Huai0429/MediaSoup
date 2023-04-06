@@ -17788,8 +17788,12 @@ let producerTransport
 let producer
 let consumerTransport 
 let consumer
-socket.on('connection-success' , ({ socketId }) => { //'connection-success' event
-    console.log(socketId)
+let isProducer = false
+
+
+
+socket.on('connection-success' , ({ socketId,existsProducer }) => { //'connection-success' event
+    console.log(socketId,existsProducer)
     document.querySelector('#socketID').textContent = 'socketID: '+socketId
 })
 
@@ -17818,17 +17822,19 @@ let params = {
     }
 }
 
-const streamSuccess = async (stream)=>{ //success callback
+const streamSuccess = (stream)=>{ //success callback
     localVideo.srcObject = stream
     const track = stream.getVideoTracks()[0]
     params = { //get video track add to params
         track,
         ...params
     }
+
+    goConnect(true)
 }
 
 const getLocalStream = () => {
-    navigator.getUserMedia({
+    navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         width: {
@@ -17840,9 +17846,22 @@ const getLocalStream = () => {
           max: 1080,
         }
       }
-    }, streamSuccess, error => {
+    }).then(streamSuccess).catch(error=>{
       console.log(error.message)
     })
+}
+
+const goConsume = () => {
+  goConnect(false)
+}
+
+const goConnect = (ProducerOrConsumer)=>{
+  isProducer = ProducerOrConsumer
+  device === undefined ? getRtpCapabilities():goCreateTransport()
+}
+
+const goCreateTransport = ()=>{
+  isProducer ? createSendTransport():createRecvTransport()
 }
 
 //creat Device as https://mediasoup.org/documentation/v3/mediasoup-client/api/#Device
@@ -17855,7 +17874,11 @@ const createDevice = async()=>{
       routerRtpCapabilities: rtpCapabilities
     })
     console.log('Create Device')
-    console.log('RTP Capabilities',device.rtpCapabilities)
+    console.log('Device RTP Capabilities',device.rtpCapabilities)
+
+    //after btn2 create device go btn3
+    goCreateTransport()
+
   }catch(error){
     console.log(error)
     if(error.name === 'UnsupportedError')
@@ -17866,10 +17889,13 @@ const createDevice = async()=>{
 
 // after click button 2 getRtpCapabilities
 const getRtpCapabilities = ()=>{
-  socket.emit('getRtpCapabilities',(data)=>{
+  socket.emit('CreateRoom',(data)=>{
     console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
     // document.querySelector('#Rtp_Capabilities').textContent = 'Rtp Capabilities: '+data.rtpCapabilities
     rtpCapabilities = data.rtpCapabilities
+
+    //btn 3
+    createDevice()
   })
 }
 
@@ -17923,6 +17949,8 @@ const createSendTransport=()=>{
         errback(error)
       }
     })
+
+    connectSendTransport()
   })
 }
 
@@ -17971,6 +17999,8 @@ const createRecvTransport = async()=>{
         errback(error)
       }
     })
+
+    connectRecvTransport()
   })
 }
 
@@ -18005,12 +18035,12 @@ const connectRecvTransport = async()=>{
 
 
 btnLocalVideo.addEventListener('click', getLocalStream)
-btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
-btnDevice.addEventListener('click', createDevice)
-btnCreateSendTransport.addEventListener('click', createSendTransport)
-btnConnectSendTransport.addEventListener('click', connectSendTransport)
-btnRecvSendTransport.addEventListener('click', createRecvTransport)
-btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
+// btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
+// btnDevice.addEventListener('click', createDevice)
+// btnCreateSendTransport.addEventListener('click', createSendTransport)
+// btnConnectSendTransport.addEventListener('click', connectSendTransport)
+btnRecvSendTransport.addEventListener('click', goConsume)
+// btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
 
 
 

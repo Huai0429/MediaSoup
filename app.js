@@ -14,7 +14,7 @@ import e from 'express'
 import { send } from 'process'
 import { resolveObjectURL } from 'buffer'
 import { randomFillSync } from 'crypto'
-import { profile } from 'console'
+import { Console, profile } from 'console'
 
 let worker 
 let consumer
@@ -90,24 +90,39 @@ peers.on('connection' , async socket => { //'connection' event on peers
     console.log('"Connection" Event from app.js'),
     console.log(socket.id)
     socket.emit('connection-success',{ //emit back 'connection-success' link to index.js
-        socketId: socket.id
+        socketId: socket.id,
+        existsProducer: producer ? true : false,
     })
 
     socket.on('disconnect',()=>{
         //do some clean up
         console.log('peer disconnect')
     })
-    router = await worker.createRouter({mediaCodecs,})
+    
+
+    socket.on('CreateRoom',async(callback)=>{
+        if (router === undefined){
+            router = await worker.createRouter({mediaCodecs,})
+            console.log(`Router ID: ${router.id}`)
+        }
+        getRtpCapabilities(callback)
+    })
+
+    const getRtpCapabilities=(callback)=>{
+        const rtpCapabilities = router.rtpCapabilities
+
+        callback({rtpCapabilities})// call back for emit in index.js
+    }
 
     // call from 'const getRtpCapabilities' from index.js
-    socket.on('getRtpCapabilities',(callback)=>{  
+    // socket.on('getRtpCapabilities',(callback)=>{  
 
-        const rtpCapabilities = router.rtpCapabilities
-        console.log('"getRtpCapabilities" Event from app.js')
-        // console.log(`rtp Capabilities${rtpCapabilities.codecs}`)
+    //     const rtpCapabilities = router.rtpCapabilities
+    //     console.log('"getRtpCapabilities" Event from app.js')
+    //     // console.log(`rtp Capabilities${rtpCapabilities.codecs}`)
 
-        callback({rtpCapabilities}) // call back for emit in index.js 
-    })
+    //     callback({rtpCapabilities}) // call back for emit in index.js 
+    // })
 
     //call from const createSendTransport (button 3)
     socket.on('createWebRtcTransport',async ({sender},callback)=>{

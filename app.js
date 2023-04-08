@@ -20,6 +20,7 @@ let worker
 let consumer
 let producer
 let router 
+let router2
 let producerTransport
 let consumerTransport
 
@@ -105,13 +106,17 @@ peers.on('connection' , async socket => { //'connection' event on peers
             router = await worker.createRouter({mediaCodecs,})
             console.log(`Router ID: ${router.id}`)
         }
+        if (router2 === undefined){
+            router2 = await worker.createRouter({mediaCodecs,})
+            console.log(`Router2 ID: ${router2.id}`)
+        }
         getRtpCapabilities(callback)
     })
 
     const getRtpCapabilities=(callback)=>{
         const rtpCapabilities = router.rtpCapabilities
-
-        callback({rtpCapabilities})// call back for emit in index.js
+        const rtpCapabilities2 = router2.rtpCapabilities
+        callback({rtpCapabilities,rtpCapabilities2})// call back for emit in index.js
     }
 
     // call from 'const getRtpCapabilities' from index.js

@@ -17784,6 +17784,7 @@ const mediasoupClient = require('mediasoup-client')
 const socket = io("/mediasoup") 
 let device
 let rtpCapabilities
+let rtpCapabilities2
 let producerTransport
 let producer
 let consumerTransport 
@@ -17871,7 +17872,8 @@ const createDevice = async()=>{
     device = new mediasoupClient.Device()
 
     await device.load({
-      routerRtpCapabilities: rtpCapabilities
+      routerRtpCapabilities: rtpCapabilities,
+      router2RtpCapabilities: rtpCapabilities2
     })
     console.log('Create Device')
     console.log('Device RTP Capabilities',device.rtpCapabilities)
@@ -17891,6 +17893,7 @@ const createDevice = async()=>{
 const getRtpCapabilities = ()=>{
   socket.emit('CreateRoom',(data)=>{
     console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
+    console.log(`Router2 RTP Capabilities... ${data.rtpCapabilities2}`)
     // document.querySelector('#Rtp_Capabilities').textContent = 'Rtp Capabilities: '+data.rtpCapabilities
     rtpCapabilities = data.rtpCapabilities
 

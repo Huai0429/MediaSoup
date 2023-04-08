@@ -11,7 +11,8 @@ let producer
 let consumerTransport 
 let consumer
 let isProducer = false
-
+let R2consumerTransport
+let R2producerTransport
 
 
 socket.on('connection-success' , ({ socketId,existsProducer }) => { //'connection-success' event
@@ -83,7 +84,14 @@ const goConnect = (ProducerOrConsumer)=>{
 }
 
 const goCreateTransport = ()=>{
-  isProducer ? createSendTransport():createRecvTransport()
+  if(isProducer){
+    createSendTransport(true)
+    // createRecvTransport(true)
+    // createSendTransport(false)//R2
+  }else{
+    createRecvTransport(true)
+    //createSendTransport(false)
+  }
 }
 
 //creat Device as https://mediasoup.org/documentation/v3/mediasoup-client/api/#Device
@@ -98,7 +106,7 @@ const createDevice = async()=>{
     })
     console.log('Create Device')
     console.log('Device RTP Capabilities',device.rtpCapabilities)
-
+    console.log('Device RTP Capabilities2',device.rtpCapabilities)
     //after btn2 create device go btn3
     goCreateTransport()
 
@@ -117,21 +125,25 @@ const getRtpCapabilities = ()=>{
     console.log(`Router2 RTP Capabilities... ${data.rtpCapabilities2}`)
     // document.querySelector('#Rtp_Capabilities').textContent = 'Rtp Capabilities: '+data.rtpCapabilities
     rtpCapabilities = data.rtpCapabilities
-
+    rtpCapabilities2 = data.rtpCapabilities2
     //btn 3
     createDevice()
   })
 }
 
-const createSendTransport=()=>{
+const createSendTransport=(mode)=>{
   console.log('Start to create Send Transport as WebRtc transport...')
 
-  socket.emit('createWebRtcTransport',{sender:true},({params})=>{
+  socket.emit('createWebRtcTransport',{sender:true,mode:mode},({params})=>{
     if (params.error){
       console.log(params.error)
       return
     }
-    document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport id: '+params.id
+    if(mode)
+      document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport on router1 id: '+params.id
+    else
+      document.querySelector('#R2_WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport on router2 id: '+params.id
+    
     console.log(params)
     console.log('Create "Send Transport" Successful and waiting for connect')
 
@@ -173,16 +185,15 @@ const createSendTransport=()=>{
         errback(error)
       }
     })
-
-    connectSendTransport()
+    connectSendTransport(mode)
+    
   })
 }
 
 //producer different from producer transport
 
-const connectSendTransport = async()=>{
+const connectSendTransport = async(mode)=>{
   producer = await producerTransport.produce(params) // produce connect-1
-
   producer.on('trackended',()=>{
     console.log('track ended')
 
@@ -194,44 +205,71 @@ const connectSendTransport = async()=>{
 
     // close video track
   })
+  if(mode)
+    createRecvTransport(true)
+  // goConsume()
 }
 
 
-const createRecvTransport = async()=>{
-  await socket.emit('createWebRtcTransport',{sender:false},({params}) =>{
-    if(params.error){
-      console.log(params.error)
-      return
-    }
-    document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport id: '+params.id
-    console.log(params)
-
-    console.log('Create "Recv Transport" Successful and waiting for connect')
-    // create recv transport
-    consumerTransport = device.createRecvTransport(params)
-    consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
-      try{
-        //signal local DTLS parameters to the server side transport
-        await socket.emit('transport-recv-connect',{
-          // transportId:consumerTransport.id,
-          dtlsParameters,
-        })
-        //Tell transport that parameters were tansmitted
-        callback()
-      }catch(error){
-        //tell transport that something goes wrong
-        errback(error)
+const createRecvTransport = async(mode)=>{
+    await socket.emit('createWebRtcTransport',{sender:false,mode:mode},({params}) =>{
+      if(params.error){
+        console.log(params.error)
+        return
       }
-    })
+      if(mode)
+        document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router1 id: '+params.id
+      else
+        document.querySelector('#R2_WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router2 id: '+params.id
 
-    connectRecvTransport()
-  })
+      console.log(params.id)
+
+      console.log('Create "Recv Transport" Successful and waiting for connect')
+      // create recv transport
+      if(mode){
+        consumerTransport = device.createRecvTransport(params)
+        console.log(`consumerTransportID:${consumerTransport.id}`)
+        consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
+          try{
+            //signal local DTLS parameters to the server side transport
+            await socket.emit('transport-recv-connect',{
+              // transportId:R2consumerTransport.id,
+              dtlsParameters,
+            })
+            //Tell transport that parameters were tansmitted
+            callback()
+          }catch(error){
+            //tell transport that something goes wrong
+            errback(error)
+          }
+        })
+      }else{
+        R2consumerTransport = device.createRecvTransport(params)
+        console.log(`R2consumerTransportID:${R2consumerTransport.id}`)
+        R2consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
+          try{
+            //signal local DTLS parameters to the server side transport
+            await socket.emit('transport-recv-connect',{
+              // transportId:consumerTransport.id,
+              dtlsParameters,
+            })
+            //Tell transport that parameters were tansmitted
+            callback()
+          }catch(error){
+            //tell transport that something goes wrong
+            errback(error)
+          }
+        })
+      }
+      connectRecvTransport(mode)
+    })
 }
 
 
-const connectRecvTransport = async()=>{
+const connectRecvTransport = async(mode)=>{
   await socket.emit('consume',{
     rtpCapabilities:device.rtpCapabilities,
+    mode:mode,
   },async({params})=>{
     if(params.error){
       console.log(`${device.rtpCapabilities}`)

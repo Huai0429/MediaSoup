@@ -23,7 +23,8 @@ let router
 let router2
 let producerTransport
 let consumerTransport
-
+let R2producerTransport
+let R2consumerTransport
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
 })
@@ -130,12 +131,23 @@ peers.on('connection' , async socket => { //'connection' event on peers
     // })
 
     //call from const createSendTransport (button 3)
-    socket.on('createWebRtcTransport',async ({sender},callback)=>{
+    socket.on('createWebRtcTransport',async ({sender,mode},callback)=>{
         console.log(`Is this a sender request? ${sender}`)
-        if(sender)
-            producerTransport = await createWebRtcTransport(callback)
-        else 
-            consumerTransport = await createWebRtcTransport(callback)
+        console.log(`Is this a mode request? ${mode}`)
+        if(sender){
+            if(mode)
+                producerTransport = await createWebRtcTransport(callback,mode)
+            else
+                R2producerTransport = await createWebRtcTransport(callback,mode)
+        }
+        else{
+            if(mode)
+                consumerTransport = await createWebRtcTransport(callback,mode)
+            else
+                R2consumerTransport = await createWebRtcTransport(callback,mode)
+        }
+            
+        // if(mode)
 
     })
 
@@ -155,7 +167,6 @@ peers.on('connection' , async socket => { //'connection' event on peers
             console.log('transport for this producer closed ')
             producer.close()
         })
-
         callback({
             id : producer.id
         })
@@ -164,37 +175,41 @@ peers.on('connection' , async socket => { //'connection' event on peers
         console.log(`DTLS PARAMS:${dtlsParameters}`)
         await consumerTransport.connect({dtlsParameters})
     })
-    socket.on('consume',async({rtpCapabilities},callback)=>{
+    socket.on('consume',async({rtpCapabilities,mode},callback)=>{
         try{
             console.log(`consume in app.js ${producer.id}`)
             // console.log(`${producer.id}`)
-            if(router.canConsume({
-                producerId:producer.id,
-                rtpCapabilities,
-            })){
-                consumer = await consumerTransport.consume({
+            if(mode)
+            {
+                if(router.canConsume({
                     producerId:producer.id,
                     rtpCapabilities,
-                    paused:true,
-                })
-                consumer.on('transportclose',()=>{
-                    console.log('transport close from consumer')
-                })
-                consumer.on('producerclose',()=>{
-                    console.log('producer of consumer closed')
-                })
-                const params = {
-                    id:consumer.id,
-                    producerId:producer.id,
-                    kind:consumer.kind,
-                    rtpParameters:consumer.rtpParameters,
+                })){
+                    consumer = await consumerTransport.consume({
+                        producerId:producer.id,
+                        rtpCapabilities,
+                        paused:true,
+                    })
+                    consumer.on('transportclose',()=>{
+                        console.log('transport close from consumer')
+                    })
+                    consumer.on('producerclose',()=>{
+                        console.log('producer of consumer closed')
+                    })
+                    const params = {
+                        id:consumer.id,
+                        producerId:producer.id,
+                        kind:consumer.kind,
+                        rtpParameters:consumer.rtpParameters,
+                    }
+    
+                    callback({params}) //because callback on index.js is an object
                 }
-
-                callback({params}) //because callback on index.js is an object
             }
+            
 
         }catch(error){
-            // console.log(`producer ID : ${producer.id}`)
+            // console.log(`producer ID : ${producer.id}${mode}`)
             console.log(error.message)
             callback({
                 params:{
@@ -212,9 +227,10 @@ peers.on('connection' , async socket => { //'connection' event on peers
 
 
 //producer transport
-
+let transport
+let transport2
 //createWebRtcTransport
-const createWebRtcTransport = async(callback)=>{
+const createWebRtcTransport = async(callback,mode)=>{
     try {
         const webRtcTransport_options = {
             listenIps:[
@@ -227,8 +243,15 @@ const createWebRtcTransport = async(callback)=>{
             enableTcp:true,
             preferUdp:true,
         }
-        let transport = await router.createWebRtcTransport(webRtcTransport_options)
-        console.log(`Create WebRtc Transport id: ${transport.id}`)
+        if(mode){
+            transport = await router.createWebRtcTransport(webRtcTransport_options)
+            console.log(`Create WebRtc Transport id: ${transport.id} on router`)
+        }
+        else{
+            transport2 = await router2.createWebRtcTransport(webRtcTransport_options)
+            console.log(`Create WebRtc Transport id: ${transport2.id} on router2`)
+        }
+        // console.log(`Create WebRtc Transport id: ${transport.id}`)
         transport.on('dtlsstatechange',dtlsState=>{
             if(dtlsState=='closed'){
                 transport.close()
@@ -238,14 +261,25 @@ const createWebRtcTransport = async(callback)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
-        callback({ // callback to const createSendTranspor in index.js
-            params:{
-                id: transport.id,
-                iceParameters: transport.iceParameters,
-                iceCandidates: transport.iceCandidates,
-                dtlsParameters: transport.dtlsParameters,
-            }
-        })
+        if(!mode){
+            callback({
+                params:{
+                    id: transport2.id,
+                    iceParameters: transport2.iceParameters,
+                    iceCandidates: transport2.iceCandidates,
+                    dtlsParameters: transport2.dtlsParameters,
+                }
+            })
+        }else{
+            callback({
+                params:{
+                    id: transport.id,
+                    iceParameters: transport.iceParameters,
+                    iceCandidates: transport.iceCandidates,
+                    dtlsParameters: transport.dtlsParameters,
+                }
+            }) 
+        }    
 
         return transport
     }catch(error){

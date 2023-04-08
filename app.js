@@ -27,6 +27,7 @@ let producerTransport
 let consumerTransport
 let RProducerTransport
 let RConsumerTransport
+let Rconsumer
 
 
 app.get('/',(req,res)=>{
@@ -148,9 +149,12 @@ peers.on('connection' , async socket => { //'connection' event on peers
         }
     })
 
-    socket.on('transport-connect',async({dtlsParameters})=>{
+    socket.on('transport-connect',async({dtlsParameters},mode)=>{
         console.log('DTLS PARAMS...',[dtlsParameters])
-        await producerTransport.connect({dtlsParameters})
+        if(mode)
+            await producerTransport.connect({dtlsParameters})
+        else
+            await RConsumerTransport.connect({dtlsParameters})
     })
 
     socket.on('transport-produce',async({kind,rtpParameters,appData},callback)=>{
@@ -211,6 +215,49 @@ peers.on('connection' , async socket => { //'connection' event on peers
             })
         }
     })
+
+    socket.on('router-consume',async({rtpCapabilities},callback)=>{
+        try{
+            console.log(`router-consume in app.js ${producer.id}`)
+            // console.log(`${producer.id}`)
+            if(router2.canConsume({
+                producerId:producer.id,
+                rtpCapabilities,
+            })){
+                console.log(`RconsumerID ${producer.id}`)
+                Rconsumer = await RConsumerTransport.consume({
+                    producerId:producer.id,
+                    rtpCapabilities,
+                    paused:true,
+                })
+                consumer.on('transportclose',()=>{
+                    console.log('transport close from consumer')
+                })
+                consumer.on('producerclose',()=>{
+                    console.log('producer of consumer closed')
+                })
+                
+                const params = {
+                    id:Rconsumer.id,
+                    producerId:producer.id,
+                    kind:Rconsumer.kind,
+                    rtpParameters:Rconsumer.rtpParameters,
+                }
+
+                callback({params}) //because callback on index.js is an object
+            }
+
+        }catch(error){
+            // console.log(`producer ID : ${producer.id}`)
+            console.log(error.message)
+            callback({
+                params:{
+                    error:error
+                }
+            })
+        }
+    })
+
     socket.on('consumer-resume',async ()=>{//restart consumer's stream stop by 150 lines
         console.log('consumer resume')
         await consumer.resume()

@@ -17789,6 +17789,10 @@ let producerTransport
 let producer
 let consumerTransport 
 let consumer
+
+let RProducerTransport
+let RConsumerTransport
+let RConsumer
 let isProducer = false
 
 
@@ -17914,17 +17918,27 @@ const createSendTransport=()=>{
     console.log(params.id)
     console.log(params.id2)
     console.log('Create "Send Transport" Successful and waiting for connect')
-
+    const parameters = {
+      id: params.id,
+      iceParameters: params.iceParameters,
+      iceCandidates: params.iceCandidates,
+      dtlsParameters: params.dtlsParameters,}
+    const parameters2 = {
+        id: params.id2,
+        iceParameters: params.iceParameters,
+        iceCandidates: params.iceCandidates,
+        dtlsParameters: params.dtlsParameters,}
     //transport connect event for producer'
     //https://mediasoup.org/documentation/v3/communication-between-client-and-server/#creating-transports
-    producerTransport = device.createSendTransport(params)
-
+    producerTransport = device.createSendTransport(parameters)
     producerTransport.on('connect',async({dtlsParameters},callback,errback)=>{ // produce connect-2
+      console.log(`test1111`)
       try{
         // DTLS parameters to the server side transport
         await socket.emit('transport-connect',{
           // transportId:producerTransport.id,
           dtlsParameters: dtlsParameters,
+          mode:true,
         })
 
         // tell the transport that parameters were transmitted
@@ -17935,7 +17949,6 @@ const createSendTransport=()=>{
     })
     producerTransport.on('produce',async(parameters,callback,errback)=>{
       console.log(parameters)
-
       try{
         await socket.emit('transport-produce',{
           // transportId: producerTransport.id,
@@ -17953,7 +17966,26 @@ const createSendTransport=()=>{
         errback(error)
       }
     })
+    //R2
+    RConsumerTransport = device.createRecvTransport(parameters2)
+    console.log(`RConsumerTransport ${RConsumerTransport.id}`)
+    RConsumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
+      try{
+        //signal local DTLS parameters to the server side transport
+        await socket.emit('transport-recv-connect',{
+          // transportId:RConsumerTransport.id,
+          dtlsParameters,
+          // mode:false
+        })
+        //Tell transport that parameters were tansmitted
+        callback()
+      }catch(error){
+        //tell transport that something goes wrong
+        errback(error)
+      }
+    })
 
+    connectRecvTransport(false)
     connectSendTransport()
   })
 }
@@ -18004,36 +18036,65 @@ const createRecvTransport = async()=>{
       }
     })
 
-    connectRecvTransport()
+    connectRecvTransport(true)
   })
 }
 
 
-const connectRecvTransport = async()=>{
-  await socket.emit('consume',{
-    rtpCapabilities:device.rtpCapabilities,
-  },async({params})=>{
-    if(params.error){
-      console.log(`${device.rtpCapabilities}`)
-      console.log(`Cannot Consume ${params.error}`)
-      return
-    }
-
-    console.log(params)
-    consumer = await consumerTransport.consume({
-      id:params.id,
-      producerId:params.producerId,
-      kind:params.kind,
-      rtpParameters:params.rtpParameters
+const connectRecvTransport = async(mode)=>{
+  if(mode){
+    await socket.emit('consume',{
+      rtpCapabilities:device.rtpCapabilities,
+    },async({params})=>{
+      if(params.error){
+        console.log(`${device.rtpCapabilities}`)
+        console.log(`Cannot Consume ${params.error}`)
+        return
+      }
+  
+      console.log(params)
+      consumer = await consumerTransport.consume({
+        id:params.id,
+        producerId:params.producerId,
+        kind:params.kind,
+        rtpParameters:params.rtpParameters
+      })
+  
+      const{track} = consumer
+      
+      remoteVideo.srcObject = new MediaStream([track])
+      document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
+      document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId,
+      socket.emit('consumer-resume')
     })
+  }else{
+    await socket.emit('router-consume',{
+      rtpCapabilities:device.rtpCapabilities,
+    },async({params})=>{
+      if(params.error){
+        console.log(`${device.rtpCapabilities}`)
+        console.log(`Cannot Consume ${params.error}`)
+        return
+      }
+  
+      console.log(params)
+      RConsumer = await RConsumerTransport.consume({
+        id:params.id,
+        producerId:params.producerId,
+        kind:params.kind,
+        rtpParameters:params.rtpParameters
+      })
+  
+      const{track} = RConsumer
+      
+      remoteVideo.srcObject = new MediaStream([track])
+      document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
+      document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId,
+      socket.emit('consumer-resume')
+    })
+  }
 
-    const{track} = consumer
-    
-    remoteVideo.srcObject = new MediaStream([track])
-    document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
-    document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId,
-    socket.emit('consumer-resume')
-  })
+  
 }
 
 

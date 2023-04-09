@@ -86,7 +86,6 @@ const goConnect = (ProducerOrConsumer)=>{
 const goCreateTransport = ()=>{
   if(isProducer){
     createSendTransport(true)
-    // createRecvTransport(true)
     // createSendTransport(false)//R2
   }else{
     createRecvTransport(true)
@@ -207,6 +206,7 @@ const connectSendTransport = async(mode)=>{
   })
   if(mode)
     createRecvTransport(true)
+    // createSendTransport(false)//R2
   // goConsume()
 }
 

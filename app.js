@@ -18,13 +18,16 @@ import { Console, profile } from 'console'
 
 let worker 
 let consumer
+let R2consumer
 let producer
+let R2producer
 let router 
 let router2
 let producerTransport
 let consumerTransport
 let R2producerTransport
 let R2consumerTransport
+let which_er
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
 })
@@ -151,22 +154,46 @@ peers.on('connection' , async socket => { //'connection' event on peers
 
     })
 
-    socket.on('transport-connect',async({dtlsParameters})=>{
-        console.log('DTLS PARAMS...',[dtlsParameters])
-        await producerTransport.connect({dtlsParameters})
+    socket.on('transport-connect',async({ID,dtlsParameters,mode})=>{
+        if(mode){
+            console.log('R1 DTLS PARAMS...',[dtlsParameters])
+            // console.log('Finger ',[dtlsParameters.fingerprints])
+            await producerTransport.connect({dtlsParameters})
+        }else{
+            console.log('R2 DTLS PARAMS...',[dtlsParameters])
+            // console.log('Finger ',[dtlsParameters.fingerprints])
+            await R2producerTransport.connect({dtlsParameters})
+        }
+        
     })
 
-    socket.on('transport-produce',async({kind,rtpParameters,appData},callback)=>{
-        producer = await producerTransport.produce({
-            kind,
-            rtpParameters,    
-        })
+    socket.on('transport-produce',async({kind,rtpParameters,appData,mode},callback)=>{
+        if(mode){
+            producer = await producerTransport.produce({
+                kind,
+                rtpParameters,    
+            })
+            which_er = producer
+            console.log('Producer ID: ',producer.id,producer.kind)
+        }else{
+            R2producer = await R2producerTransport.produce({
+                kind,
+                rtpParameters,    
+            })
+            which_er = R2producer
+            console.log('R2Producer ID: ',R2producer.id,R2producer.kind)
+        }
+        
 
-        console.log('Producer ID: ',producer.id,producer.kind)
-        producer.on('transportclose',()=>{
+        
+        which_er.on('transportclose',()=>{
             console.log('transport for this producer closed ')
             producer.close()
         })
+        // await router.pipeToRouter({
+        //     producerId:producer.id,
+        //     router:router2
+        // })
         callback({
             id : producer.id
         })
@@ -261,22 +288,22 @@ const createWebRtcTransport = async(callback,mode)=>{
         transport.on('close',()=>{
             console.log('transport closed')
         })
-        if(!mode){
-            callback({
-                params:{
-                    id: transport2.id,
-                    iceParameters: transport2.iceParameters,
-                    iceCandidates: transport2.iceCandidates,
-                    dtlsParameters: transport2.dtlsParameters,
-                }
-            })
-        }else{
+        if(mode){
             callback({
                 params:{
                     id: transport.id,
                     iceParameters: transport.iceParameters,
                     iceCandidates: transport.iceCandidates,
                     dtlsParameters: transport.dtlsParameters,
+                }
+            })
+        }else{
+            callback({
+                params:{
+                    id: transport2.id,
+                    iceParameters: transport2.iceParameters,
+                    iceCandidates: transport2.iceCandidates,
+                    dtlsParameters: transport2.dtlsParameters,
                 }
             }) 
         }    

@@ -17,6 +17,7 @@ import { randomFillSync } from 'crypto'
 import { Console, profile } from 'console'
 
 let worker 
+let worker2
 let consumer
 let R2consumer
 let producer
@@ -27,7 +28,25 @@ let producerTransport
 let consumerTransport
 let R2producerTransport
 let R2consumerTransport
+let pipe1
+let pipe2
+let pipeConsumer
+let pipeProducer
 let which_er
+const webRtcTransport_options = {
+    listenIps:[
+        {
+            ip:'0.0.0.0',//replace by relevant IP address
+            announcedIp: '140.118.107.177',//host machine IP
+        }
+    ],
+    enableUdp:true,
+    enableTcp:true,
+    preferUdp:true,
+}
+
+
+
 app.get('/',(req,res)=>{
     res.send('Hello from mediasoup app')
 })
@@ -61,15 +80,23 @@ const  createWorker = async()=>{
         rtcMinPort: 2000,
         rtcMaxPort: 2020,
     })
+    worker2 = await mediasoup.createWorker({
+        rtcMinPort: 2030,
+        rtcMaxPort: 2050,
+    })
     console.log(`worker pid ${worker.pid}`)
-
+    console.log(`worker2 pid ${worker2.pid}`)
     worker.on('died',error => {
         console.error('mediasoup worker has died')
         setTimeout(()=> process.exit(1),2000)//exit in 2 sec
     })
-    return worker
+    worker2.on('died',error => {
+        console.error('mediasoup worker2 has died')
+        setTimeout(()=> process.exit(1),2000)//exit in 2 sec
+    })
+    return worker,worker2
 }
-worker = createWorker()
+worker,worker2 = createWorker()
 
 const mediaCodecs = [
     {
@@ -111,7 +138,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
             console.log(`Router ID: ${router.id}`)
         }
         if (router2 === undefined){
-            router2 = await worker.createRouter({mediaCodecs,})
+            router2 = await worker2.createRouter({mediaCodecs,})
             console.log(`Router2 ID: ${router2.id}`)
         }
         getRtpCapabilities(callback)
@@ -154,7 +181,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
 
     })
 
-    socket.on('transport-connect',async({ID,dtlsParameters,mode})=>{
+    socket.on('transport-connect',async({dtlsParameters,mode})=>{
         if(mode){
             console.log('R1 DTLS PARAMS...',[dtlsParameters])
             // console.log('Finger ',[dtlsParameters.fingerprints])
@@ -190,17 +217,20 @@ peers.on('connection' , async socket => { //'connection' event on peers
             console.log('transport for this producer closed ')
             producer.close()
         })
-        // await router.pipeToRouter({
-        //     producerId:producer.id,
-        //     router:router2
-        // })
+        
         callback({
-            id : producer.id
+            id : which_er.id
         })
     })
-    socket.on('transport-recv-connect',async({dtlsParameters})=>{
-        console.log(`DTLS PARAMS:${dtlsParameters}`)
-        await consumerTransport.connect({dtlsParameters})
+    socket.on('transport-recv-connect',async({dtlsParameters,mode,isPipe})=>{
+        if(mode){
+            console.log(`R1 DTLS PARAMS:${dtlsParameters}`)
+            await consumerTransport.connect({dtlsParameters})
+        }else{
+            console.log(`R2 DTLS PARAMS:${dtlsParameters}`)
+            await R2consumerTransport.connect({dtlsParameters})
+        }
+        
     })
     socket.on('consume',async({rtpCapabilities,mode},callback)=>{
         try{
@@ -232,6 +262,31 @@ peers.on('connection' , async socket => { //'connection' event on peers
     
                     callback({params}) //because callback on index.js is an object
                 }
+            }else{
+                if(router2.canConsume({
+                    producerId:pipeProducer.id,
+                    rtpCapabilities,
+                })){
+                    R2consumer = await R2consumerTransport.consume({
+                        producerId:pipeProducer.id,
+                        rtpCapabilities,
+                        paused:true,
+                    })
+                    R2consumer.on('transportclose',()=>{
+                        console.log('transport close from consumer')
+                    })
+                    R2consumer.on('producerclose',()=>{
+                        console.log('producer of consumer closed')
+                    })
+                    const params = {
+                        id:R2consumer.id,
+                        producerId:pipeProducer.id,
+                        kind:R2consumer.kind,
+                        rtpParameters:R2consumer.rtpParameters,
+                    }
+    
+                    callback({params})
+                }
             }
             
 
@@ -245,9 +300,28 @@ peers.on('connection' , async socket => { //'connection' event on peers
             })
         }
     })
-    socket.on('consumer-resume',async ()=>{//restart consumer's stream stop by 150 lines
+    socket.on('consumer-resume',async (mode)=>{//restart consumer's stream stop by 150 lines
         console.log('consumer resume')
-        await consumer.resume()
+        if(mode)
+            await R2consumer.resume()
+        else 
+            await consumer.resume()
+    })
+    socket.on('PipeToRouter',async(callback)=>{
+        pipe1 = await router.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
+        pipe2 = await router2.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
+        await pipe1.connect({ip: pipe2.tuple.localIp, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
+        await pipe2.connect({ip: pipe1.tuple.localIp, port: pipe1.tuple.localPort, srtpParameters: pipe1.srtpParameters});
+        pipeConsumer = await pipe1.consume({ producerId: producer.id });
+        pipeProducer = await pipe2.produce({ id: producer.id,kind: pipeConsumer.kind, rtpParameters: pipeConsumer.rtpParameters});
+        console.log('pipeProducer:',pipeProducer.id)
+        // let PipeID = await router.pipeToRouter({
+        //     producerId:producer.id,
+        //     router:router2
+        // })
+        // console.log('pipeConsumer',temp)
+        callback(pipe1)
+        
     })
 })
 
@@ -259,35 +333,34 @@ let transport2
 //createWebRtcTransport
 const createWebRtcTransport = async(callback,mode)=>{
     try {
-        const webRtcTransport_options = {
-            listenIps:[
-                {
-                    ip:'0.0.0.0',//replace by relevant IP address
-                    announcedIp: '140.118.107.177',//host machine IP
-                }
-            ],
-            enableUdp:true,
-            enableTcp:true,
-            preferUdp:true,
-        }
         if(mode){
             transport = await router.createWebRtcTransport(webRtcTransport_options)
             console.log(`Create WebRtc Transport id: ${transport.id} on router`)
+            transport.on('dtlsstatechange',dtlsState=>{
+                if(dtlsState=='closed'){
+                    transport.close()
+                }
+            })
+    
+            transport.on('close',()=>{
+                console.log('transport closed')
+            })
         }
         else{
             transport2 = await router2.createWebRtcTransport(webRtcTransport_options)
             console.log(`Create WebRtc Transport id: ${transport2.id} on router2`)
+            transport2.on('dtlsstatechange',dtlsState=>{
+                if(dtlsState=='closed'){
+                    transport2.close()
+                }
+            })
+    
+            transport2.on('close',()=>{
+                console.log('transport2 closed')
+            })
         }
         // console.log(`Create WebRtc Transport id: ${transport.id}`)
-        transport.on('dtlsstatechange',dtlsState=>{
-            if(dtlsState=='closed'){
-                transport.close()
-            }
-        })
-
-        transport.on('close',()=>{
-            console.log('transport closed')
-        })
+        
         if(mode){
             callback({
                 params:{
@@ -319,3 +392,6 @@ const createWebRtcTransport = async(callback,mode)=>{
         })
     }
 }
+function delay(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+  }

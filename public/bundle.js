@@ -17868,12 +17868,14 @@ const goConnect = (ProducerOrConsumer)=>{
 async function goCreateTransport(){
   if(isProducer){
     createSendTransport(true)
-    await delay(50);
-    createRecvTransport(true)
-    await delay(50);
-    createSendTransport(false)//R2
+    // await delay(50);
+    // createRecvTransport(false,true)
+    // createRecvTransport(true)
+    // await delay(50);
+    // createSendTransport(false)//R2
   }else{
-    createRecvTransport(true)
+    createRecvTransport(false,true)
+    // createRecvTransport(true,false)
     //createSendTransport(false)
   }
 }
@@ -17951,7 +17953,7 @@ const createSendTransport=(mode)=>{
       try{
         // DTLS parameters to the server side transport
         await socket.emit('transport-connect',{
-          transportId:WhichTransport.id,
+          // transportId:WhichTransport.id,
           dtlsParameters: dtlsParameters,
           mode:mode,
         })
@@ -18021,6 +18023,17 @@ const connectSendTransport = async(mode)=>{
       // close video track
     })
   }
+  try{
+    await socket.emit('PipeToRouter',(PipeID)=>{
+      console.log('PipeID',PipeID)
+      // console.log('Pipe2',Pipe2)
+
+    })
+  }catch(error){
+    console.log('PipeToRouter error')
+    console.log(error)
+  }
+  console.log('Pipe to Router complete')
   
   
     // createSendTransport(false)//R2
@@ -18028,7 +18041,7 @@ const connectSendTransport = async(mode)=>{
 }
 
 
-const createRecvTransport = async(mode)=>{
+const createRecvTransport = async(mode,isPipe)=>{
     await socket.emit('createWebRtcTransport',{sender:false,mode:mode},({params}) =>{
       if(params.error){
         console.log(params.error)
@@ -18039,45 +18052,34 @@ const createRecvTransport = async(mode)=>{
       else
         document.querySelector('#R2_WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router2 id: '+params.id
 
-      console.log(params.id)
-
       console.log('Create "Recv Transport" Successful and waiting for connect')
       // create recv transport
       if(mode){
         consumerTransport = device.createRecvTransport(params)
         console.log(`consumerTransportID:${consumerTransport.id}`)
-        consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
-          try{
-            //signal local DTLS parameters to the server side transport
-            await socket.emit('transport-recv-connect',{
-              // transportId:R2consumerTransport.id,
-              dtlsParameters,
-            })
-            //Tell transport that parameters were tansmitted
-            callback()
-          }catch(error){
-            //tell transport that something goes wrong
-            errback(error)
-          }
-        })
+        WhichTransport = consumerTransport
       }else{
         R2consumerTransport = device.createRecvTransport(params)
         console.log(`R2consumerTransportID:${R2consumerTransport.id}`)
-        R2consumerTransport.on('connect',async({dtlsParameters},callback,errback)=>{
-          try{
-            //signal local DTLS parameters to the server side transport
-            await socket.emit('transport-recv-connect',{
-              // transportId:consumerTransport.id,
-              dtlsParameters,
-            })
-            //Tell transport that parameters were tansmitted
-            callback()
-          }catch(error){
-            //tell transport that something goes wrong
-            errback(error)
-          }
-        })
+        WhichTransport = R2consumerTransport
       }
+      WhichTransport.on('connect',async({dtlsParameters},callback,errback)=>{
+        try{
+          //signal local DTLS parameters to the server side transport
+          // console.log(`R2${dtlsParameters}`)
+          await socket.emit('transport-recv-connect',{
+            // transportId:WhichTransport.id,
+            dtlsParameters:dtlsParameters,
+            mode:mode,
+            isPipe:isPipe,
+          })
+          //Tell transport that parameters were tansmitted
+          callback()
+        }catch(error){
+          //tell transport that something goes wrong
+          errback(error)
+        }
+      })
       connectRecvTransport(mode)
     })
 }
@@ -18093,22 +18095,34 @@ const connectRecvTransport = async(mode)=>{
       console.log(`Cannot Consume ${params.error}`)
       return
     }
-
-    console.log(params)
-    consumer = await consumerTransport.consume({
-      id:params.id,
-      producerId:params.producerId,
-      kind:params.kind,
-      rtpParameters:params.rtpParameters
-    })
-    document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
-    document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
+    if(mode){
+      console.log(params)
+      consumer = await consumerTransport.consume({
+        id:params.id,
+        producerId:params.producerId,
+        kind:params.kind,
+        rtpParameters:params.rtpParameters
+      })
+      document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
+      document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
+    }else{
+      console.log(params)
+      R2consumer = await R2consumerTransport.consume({
+        id:params.id,
+        producerId:params.producerId,
+        kind:params.kind,
+        rtpParameters:params.rtpParameters
+      })
+      document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
+      document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
+    }
+    
     
     if (!mode){
       console.log('Consume for Remote Video')
-      const{track} = consumer
+      const{track} = R2consumer
       remoteVideo.srcObject = new MediaStream([track])
-      socket.emit('consumer-resume')  
+      socket.emit('consumer-resume',{mode:mode})  
     }
     
   })

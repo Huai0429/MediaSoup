@@ -33,6 +33,8 @@ let pipe2
 let pipeConsumer
 let pipeProducer
 let which_er
+let rtpCapabilities
+let rtpCapabilities2 
 const webRtcTransport_options = {
     listenIps:[
         {
@@ -81,8 +83,8 @@ const  createWorker = async()=>{
         rtcMaxPort: 2020,
     })
     worker2 = await mediasoup.createWorker({
-        rtcMinPort: 2030,
-        rtcMaxPort: 2050,
+        rtcMinPort: 3000,
+        rtcMaxPort: 3020,
     })
     console.log(`worker pid ${worker.pid}`)
     console.log(`worker2 pid ${worker2.pid}`)
@@ -145,8 +147,8 @@ peers.on('connection' , async socket => { //'connection' event on peers
     })
 
     const getRtpCapabilities=(callback)=>{
-        const rtpCapabilities = router.rtpCapabilities
-        const rtpCapabilities2 = router2.rtpCapabilities
+        rtpCapabilities = router.rtpCapabilities
+        rtpCapabilities2 = router2.rtpCapabilities
         callback({rtpCapabilities,rtpCapabilities2})// call back for emit in index.js
     }
 
@@ -234,7 +236,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
     })
     socket.on('consume',async({rtpCapabilities,mode},callback)=>{
         try{
-            console.log(`consume in app.js ${producer.id}`)
+            console.log(`consume in app.js ${producer.id},${mode}`)
             // console.log(`${producer.id}`)
             if(mode)
             {
@@ -265,11 +267,11 @@ peers.on('connection' , async socket => { //'connection' event on peers
             }else{
                 if(router2.canConsume({
                     producerId:pipeProducer.id,
-                    rtpCapabilities,
+                    rtpCapabilities:rtpCapabilities2,
                 })){
                     R2consumer = await R2consumerTransport.consume({
                         producerId:pipeProducer.id,
-                        rtpCapabilities,
+                        rtpCapabilities:rtpCapabilities2,
                         paused:true,
                     })
                     R2consumer.on('transportclose',()=>{
@@ -308,13 +310,15 @@ peers.on('connection' , async socket => { //'connection' event on peers
             await consumer.resume()
     })
     socket.on('PipeToRouter',async(callback)=>{
-        pipe1 = await router.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
-        pipe2 = await router2.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
+        pipe1 = await router.createPipeTransport({listenIp:'140.118.107.177', enableRtx: true, enableSrtp: true,})
+        pipe2 = await router2.createPipeTransport({listenIp:'140.118.107.177', enableRtx: true, enableSrtp: true,})
         await pipe1.connect({ip: pipe2.tuple.localIp, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
         await pipe2.connect({ip: pipe1.tuple.localIp, port: pipe1.tuple.localPort, srtpParameters: pipe1.srtpParameters});
         pipeConsumer = await pipe1.consume({ producerId: producer.id });
-        pipeProducer = await pipe2.produce({ id: producer.id,kind: pipeConsumer.kind, rtpParameters: pipeConsumer.rtpParameters});
+        pipeProducer = await pipe2.produce({ id: producer.id,kind: producer.kind, rtpParameters: producer.rtpParameters});
         console.log('pipeProducer:',pipeProducer.id)
+        const stats = await pipeConsumer.getStats();
+        console.log('pipeConsumer',stats)
         // let PipeID = await router.pipeToRouter({
         //     producerId:producer.id,
         //     router:router2
@@ -370,6 +374,7 @@ const createWebRtcTransport = async(callback,mode)=>{
                     dtlsParameters: transport.dtlsParameters,
                 }
             })
+            return transport
         }else{
             callback({
                 params:{
@@ -379,9 +384,8 @@ const createWebRtcTransport = async(callback,mode)=>{
                     dtlsParameters: transport2.dtlsParameters,
                 }
             }) 
+            return transport2
         }    
-
-        return transport
     }catch(error){
         console.log('CreateWebRtcTransport wrong')
         console.log(error)

@@ -17928,13 +17928,13 @@ const createSendTransport=(mode)=>{
     if(mode){
       params1 = params
       document.querySelector('#WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport on router1 id: '+params.id
-      producerTransport = device.createSendTransport(params)
+      producerTransport = device.createSendTransport(params1)
       WhichTransport = producerTransport
     }
     else{
       params2 = params
       document.querySelector('#R2_WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport on router2 id: '+params.id
-      R2producerTransport = device.createSendTransport(params)
+      R2producerTransport = device.createSendTransport(params2)
       WhichTransport = R2producerTransport
       // dtlsParameters.role = 'server'
     }
@@ -18047,24 +18047,25 @@ const createRecvTransport = async(mode,isPipe)=>{
         console.log(params.error)
         return
       }
-      if(mode)
-        document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router1 id: '+params.id
-      else
-        document.querySelector('#R2_WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router2 id: '+params.id
-
-      console.log('Create "Recv Transport" Successful and waiting for connect')
       // create recv transport
       if(mode){
+        document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router1 id: '+params.id
+        console.log('Create "Recv Transport" Successful and waiting for connect')
         consumerTransport = device.createRecvTransport(params)
         console.log(`consumerTransportID:${consumerTransport.id}`)
         WhichTransport = consumerTransport
       }else{
+        document.querySelector('#R2_WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router2 id: '+params.id
+        console.log('Create "Recv Transport" Successful and waiting for connect')
         R2consumerTransport = device.createRecvTransport(params)
         console.log(`R2consumerTransportID:${R2consumerTransport.id}`)
         WhichTransport = R2consumerTransport
       }
+      
       WhichTransport.on('connect',async({dtlsParameters},callback,errback)=>{
         try{
+          const stats = await WhichTransport.getStats();
+          console.log('WhichTransport',stats)
           //signal local DTLS parameters to the server side transport
           // console.log(`R2${dtlsParameters}`)
           await socket.emit('transport-recv-connect',{
@@ -18087,11 +18088,14 @@ const createRecvTransport = async(mode,isPipe)=>{
 
 const connectRecvTransport = async(mode)=>{
   await socket.emit('consume',{
-    rtpCapabilities:device.rtpCapabilities,
+    rtpCapabilities:mode?device.rtpCapabilities:device.rtpCapabilities2,
     mode:mode,
   },async({params})=>{
     if(params.error){
-      console.log(`${device.rtpCapabilities}`)
+      if(mode)
+        console.log(`1${device.rtpCapabilities}`)
+      else
+        console.log(`2${device.rtpCapabilities2}`)
       console.log(`Cannot Consume ${params.error}`)
       return
     }

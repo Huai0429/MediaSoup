@@ -18,20 +18,21 @@ import { Console, profile } from 'console'
 
 let worker 
 let worker2
+let rooms = {}          // { roomName1: { Router, rooms: [ sicketId1, ... ] }, ...}
+let peers = {}          // { socketId1: { roomName1, socket, transports = [id1, id2,] }, producers = [id1, id2,] }, consumers = [id1, id2,], peerDetails }, ...}
+let transports = []     // [ { socketId1, roomName1, transport, consumer }, ... ]
+let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
+let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
 let consumer
 let R2consumer
 let producer
 let R2producer
-let router 
-let router2
+// let router 
+// let router2
 let producerTransport
 let consumerTransport
 let R2producerTransport
 let R2consumerTransport
-let pipe1
-let pipe2
-let pipeConsumer
-let pipeProducer
 let which_er
 let rtpCapabilities
 let rtpCapabilities2 
@@ -49,11 +50,20 @@ const webRtcTransport_options = {
 
 
 
-app.get('/',(req,res)=>{
-    res.send('Hello from mediasoup app')
-})
+// app.get('/',(req,res)=>{
+//     res.send('Hello from mediasoup app')
+// })
 
-app.use('/sfu',express.static(path.join(__dirname,'public')))
+app.get('*', (req, res, next) => {
+    const path = '/sfu/'
+  
+    if (req.path.indexOf(path) == 0 && req.path.length > path.length) return next()
+  
+    res.send(`You need to specify a room name in the path e.g. 'https://127.0.0.1/sfu/room'`)
+  })
+
+// app.use('/sfu',express.static(path.join(__dirname,'public')))
+app.use('/sfu/:room', express.static(path.join(__dirname, 'public')))
 
 const options = {
     key: fs.readFileSync('./server/ssl/key.pem','utf-8'),
@@ -68,7 +78,9 @@ httpsServer.listen(3000,() => {
 
 const io = new Server(httpsServer)
 
-const peers = io.of('/mediasoup')
+// const peers = io.of('/mediasoup')
+const connections = io.of('/mediasoup')
+
 
 
 
@@ -120,12 +132,12 @@ const mediaCodecs = [
 //router
 
 //client connect & disconnect
-peers.on('connection' , async socket => { //'connection' event on peers
+connections.on('connection' , async socket => { //'connection' event on peers
     console.log('"Connection" Event from app.js'),
     console.log(socket.id)
     socket.emit('connection-success',{ //emit back 'connection-success' link to index.js
         socketId: socket.id,
-        existsProducer: producer ? true : false,
+        // existsProducer: producer ? true : false,
     })
 
     socket.on('disconnect',()=>{
@@ -133,6 +145,11 @@ peers.on('connection' , async socket => { //'connection' event on peers
         console.log('peer disconnect')
     })
     
+    socket.on('joinRoom',async(callback)=>{
+        const router = await CreateRoom(roomName,socket.id)
+    })
+    const CreateRoom = async (roomName,socketId)=>{}
+
 
     socket.on('CreateRoom',async(callback)=>{
         if (router === undefined){

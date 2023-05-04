@@ -1,85 +1,79 @@
 <html>
   <head>
     <style>
-        tr {
-            vertical-align: top;
-        }
-
-        .video {
-            width: 360px;
-            background-color: black;
-            margin: 2px 0;
-        }
-
         button {
             margin: 2;
         }
+        tr {
+            vertical-align: top;
+        }
+        video {
+            width: 360px;
+            background-color: black;
+            padding: 10;
+            margin: 1px 1px;
+        }
+        .mainTable {
+            width: 100%;
+        }
+        .localColumn {
+            width: 246px;
+        }
+        .remoteColumn {
+            display: flex;
+            flex-wrap: wrap;
+        }
 
-        #sharedBtns {
-            padding: 5;
-            background-color: papayawhip;
+        #localVideo {
+            width: 240;
+        }
+        .remoteVideo {
+            float: left;
+        }
+
+        .videoWrap {
+            margin: 3;
+            /* padding: 5; */
+            /* background-color: papayawhip; */
             display: flex;
             justify-content: center;
+        }
+
+        @media only screen and (max-width: 1060px) {
+            .video {
+                width: 300px;
+            }
+        }
+
+        @media only screen and (max-width: 940px) {
+            .video {
+                width: 240px;
+            }
         }
     </style>
   </head>
   <body>
     <body>
         <div id="video">
+            <table class="mainTable">
+                <tbody>
+                    <tr>
+                        <td class="localColumn">
+                            <video id="localVideo" autoplay class="video" muted ></video>
+                        </td>
+                        <td class="remoteColumn">
+                            <div id="videoContainer"></div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
             <table>
-                <thead>
-                    <th>Local Video</th>
-                    <th>Remote Video</th>
-                </thead>
                 <tbody>
                     <tr>
                         <td>
-                            <div id="sharedBtns">
-                                <video id="localVideo" autoplay class="video" ></video>
-                            </div>
-                        </td>
-                        <td>
-                            <div id="sharedBtns">
-                                <video id="remoteVideo" autoplay class="video" ></video>
-                            </div>
+                            
                         </td>
                     </tr>
-                    <tr>
-                        <td>
-                            <div id="sharedBtns">
-                                <button id="btnLocalVideo">Publish</button>
-                            </div>
-                        </td>
-                        <td>
-                            <div id="sharedBtns">
-                                <button id="btnRecvSendTransport">Consume</button>
-                            </div>
-                        </td>
-                    </tr>
-                    <!-- <tr>
-                        <td colspan="2">
-                            <div id="sharedBtns">
-                                <button id="btnRtpCapabilities">2. Get Rtp Capabilities</button>
-                                <br />
-                                <button id="btnDevice">3. Create Device</button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div id="sharedBtns">
-                                <button id="btnCreateSendTransport">4. Create Send Transport</button>
-                                <br />
-                                <button id="btnConnectSendTransport">5. Connect Send Transport & Produce</button></td>
-                            </div>
-                        <td>
-                            <div id="sharedBtns">
-                                <button id="btnRecvSendTransport">6. Create Recv Transport</button>
-                                <br />
-                                <button id="btnConnectRecvTransport">7. Connect Recv Transport & Consume</button>
-                            </div>
-                        </td>
-                    </tr> -->
                 </tbody>
             </table>
             <div id="socketID"></div>

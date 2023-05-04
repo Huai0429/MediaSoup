@@ -1,6 +1,6 @@
 const io = require('socket.io-client')
 const mediasoupClient = require('mediasoup-client')
-
+const roomName = window.location.pathname.split('/')[2]
 
 const socket = io("/mediasoup") 
 let device
@@ -8,10 +8,10 @@ let rtpCapabilities
 let rtpCapabilities2
 let producerTransport
 let producer
-let consumerTransport 
+let consumerTransports =[]
 let consumer
 let isProducer = false
-let R2consumerTransport
+let R2consumerTransport = []
 let R2producerTransport
 let R2producer
 let R2consumer
@@ -20,6 +20,7 @@ let WhichTransport
 socket.on('connection-success' , ({ socketId,existsProducer }) => { //'connection-success' event
     console.log(socketId,existsProducer)
     document.querySelector('#socketID').textContent = 'socketID: '+socketId
+    getLocalStream()
 })
 
 
@@ -57,9 +58,17 @@ const streamSuccess = (stream)=>{ //success callback
         ...params
     }
 
-    goConnect(true)
+    // goConnect(true)
+    joinRoom()
 }
-
+const joinRoom = () =>{
+  socket.emit('joinRoom',{roomName},(data)=>{
+    console.log('joinRoom')
+    rtpCapabilities = data.rtpCapabilities
+    rtpCapabilities2 = data.rtpCapabilities2
+    createDevice()
+  })
+}
 const getLocalStream = () => {
     navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -96,7 +105,8 @@ async function goCreateTransport(){
     // await delay(50);
     // createSendTransport(false)//R2
   }else{
-    createRecvTransport(false,true)
+    //createRecvTransport(false,true)
+    signalNewConsumerTransport(false,true)
     // createRecvTransport(true,false)
     //createSendTransport(false)
   }
@@ -116,7 +126,9 @@ const createDevice = async()=>{
     // console.log('Device RTP Capabilities',device.rtpCapabilities)
     // console.log('Device RTP Capabilities2',device.rtpCapabilities2)
     //after btn2 create device go btn3
-    goCreateTransport()
+
+    // goCreateTransport()
+    createSendTransport(true)
 
   }catch(error){
     console.log(error)
@@ -140,10 +152,21 @@ const getRtpCapabilities = ()=>{
   })
 }
 
+socket.on('new-producer',({producerId})=>signalNewConsumerTransport(producerId))
+
+const getProducer = () =>{
+  socket.emit('getProducer',producerIds =>{
+    // for each of the producer create a consumer
+    // producerIds.forEach(id => signalNewConsumerTransport(id))
+    producerIds.forEach(signalNewConsumerTransport)
+  })
+}
+
 const createSendTransport=(mode)=>{
   console.log('Start to create Send Transport as WebRtc transport...')
 
-  socket.emit('createWebRtcTransport',{sender:true,mode:mode},({params})=>{
+  // socket.emit('createWebRtcTransport',{sender:true,mode:mode},({params})=>{
+  socket.emit('createWebRtcTransport',{consumer:false,mode:mode},({params})=>{
     if (params.error){
       console.log(params.error)
       return
@@ -196,10 +219,13 @@ const createSendTransport=(mode)=>{
           rtpParameters: parameters.rtpParameters,
           appData:parameters.appData,
           mode:mode
-        },({id})=>{
+        },({id,producerexist})=>{
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({id}) //callback to transport-produce or producer id
+          // if producer exist
+          if(producerexist)
+            getProducer()
           if(mode) 
             document.querySelector('#Producer_ID').textContent = 'R1 Producer ID: '+id
           else
@@ -263,8 +289,10 @@ const connectSendTransport = async(mode)=>{
 }
 
 
-const createRecvTransport = async(mode,isPipe)=>{
-    await socket.emit('createWebRtcTransport',{sender:false,mode:mode},({params}) =>{
+// const createRecvTransport = async(mode,isPipe)=>{
+const signalNewConsumerTransport = async(remoteProducerId,mode,isPipe)=>{
+    // await socket.emit('createWebRtcTransport',{sender:false,mode:mode},({params}) =>{
+    await socket.emit('createWebRtcTransport',{consumer:true,mode:mode},({params}) =>{
       if(params.error){
         console.log(params.error)
         return
@@ -273,7 +301,7 @@ const createRecvTransport = async(mode,isPipe)=>{
       if(mode){
         document.querySelector('#WebRtc_Recv_Transport_id').textContent = 'WebRtc "Recv" Transport on router1 id: '+params.id
         console.log('Create "Recv Transport" Successful and waiting for connect')
-        consumerTransport = device.createRecvTransport(params)
+        let consumerTransport = device.createRecvTransport(params)
         console.log(`consumerTransportID:${consumerTransport.id}`)
         WhichTransport = consumerTransport
       }else{
@@ -303,14 +331,17 @@ const createRecvTransport = async(mode,isPipe)=>{
           errback(error)
         }
       })
-      connectRecvTransport(mode)
+      // connectRecvTransport(mode)
+      connectRecvTransport(WhichTransport,remoteProducerId,params.id,mode)
     })
 }
 
-
-const connectRecvTransport = async(mode)=>{
+// const connectRecvTransport = async(mode)=>{
+const connectRecvTransport = async(consumerTransport,remoteProducerId,serverConsumerTransportId,mode)=>{
   await socket.emit('consume',{
     rtpCapabilities:mode?device.rtpCapabilities:device.rtpCapabilities2,
+    remoteProducerId,
+    serverConsumerTransportId,
     mode:mode,
   },async({params})=>{
     if(params.error){
@@ -323,7 +354,7 @@ const connectRecvTransport = async(mode)=>{
     }
     if(mode){
       console.log(params)
-      consumer = await consumerTransport.consume({
+      const consumer = await consumerTransport.consume({
         id:params.id,
         producerId:params.producerId,
         kind:params.kind,
@@ -331,9 +362,18 @@ const connectRecvTransport = async(mode)=>{
       })
       document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
       document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
+      consumerTransports = [
+        ...consumerTransports,
+        {
+          consumerTransport,
+          serverConsumerTransportId:params.id,
+          producerId:remoteProducerId,
+          consumer
+        }
+      ]
     }else{
       console.log('R2consumer',params)
-      R2consumer = await R2consumerTransport.consume({
+      const R2consumer = await R2consumerTransport.consume({
         id:params.id,
         producerId:params.producerId,
         kind:params.kind,
@@ -341,15 +381,31 @@ const connectRecvTransport = async(mode)=>{
       })
       document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
       document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
+      R2consumerTransport = [
+        ...R2consumerTransport,
+        {
+          R2consumerTransport,
+          serverConsumerTransportId:params.id,
+          producerId:remoteProducerId,
+          R2consumer
+        }
+      ]
     }
     
+    const newElem = document.createElement('div')
+    newElem.setAttribute('id',`td-${remoteProducerId}`)
+    newElem.setAttribute('class','remoteVideo')
+    newElem.innerHTML = '<video id="'+remoteProducerId+'"autoplay class="video"></video>'
+    videoContainer.appendChild(newElem)
     
     if (!mode){
       console.log('Consume for Remote Video')
       const{track} = R2consumer
       // console.log(track)
-      remoteVideo.srcObject = new MediaStream([track])
-      socket.emit('consumer-resume',{mode})  
+      // remoteVideo.srcObject = new MediaStream([track])
+      document.getElementById(remoteProducerId).srcObject = new MediaStream([track])
+      // socket.emit('consumer-resume',{mode})  
+      socket.emit('consumer-resume',{mode,ServerConsumerid:params.serverConsumerId})  
     }
     
   })
@@ -359,12 +415,26 @@ function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time));
 }
 
-btnLocalVideo.addEventListener('click', getLocalStream)
+socket.on('producer-closed',({remoteProducerId,mode})=>{
+  // server notification is received when a producer is closed
+  // we need to close the client-side consumer and associated transport
+  const producerToClose = consumerTransports.find(transportData=>transportData.producerId===remoteProducerId)
+  producerToClose.consumerTransport.close()
+  producerToClose.consumer.close()
+
+  // remove the consumer transport from the list
+  consumerTransports = consumerTransports.filter(transportData => transportData.producerId !== remoteProducerId)
+
+  // remove the video div element
+  videoContainer.removeChild(document.getElementById(`td-${remoteProducerId}`))
+})
+
+// btnLocalVideo.addEventListener('click', getLocalStream)
 // btnRtpCapabilities.addEventListener('click', getRtpCapabilities)
 // btnDevice.addEventListener('click', createDevice)
 // btnCreateSendTransport.addEventListener('click', createSendTransport)
 // btnConnectSendTransport.addEventListener('click', connectSendTransport)
-btnRecvSendTransport.addEventListener('click', goConsume)
+// btnRecvSendTransport.addEventListener('click', goConsume)
 // btnConnectRecvTransport.addEventListener('click', connectRecvTransport)
 
 

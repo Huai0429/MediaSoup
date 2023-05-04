@@ -266,11 +266,11 @@ peers.on('connection' , async socket => { //'connection' event on peers
                 }
             }else{
                 if(router2.canConsume({
-                    producerId:pipeProducer.id,
+                    producerId:producer.id,
                     rtpCapabilities:rtpCapabilities2,
                 })){
                     R2consumer = await R2consumerTransport.consume({
-                        producerId:pipeProducer.id,
+                        producerId:producer.id,
                         rtpCapabilities:rtpCapabilities2,
                         paused:true,
                     })
@@ -280,9 +280,14 @@ peers.on('connection' , async socket => { //'connection' event on peers
                     R2consumer.on('producerclose',()=>{
                         console.log('producer of consumer closed')
                     })
+                    // await R2consumer.enableTraceEvent(["rtp", "fir", "pli"]);
+                    // R2consumer.on("trace", (t) => {
+                    //     console.log("R2consumer trace => ");
+                    //     console.log(t);
+                    // });
                     const params = {
                         id:R2consumer.id,
-                        producerId:pipeProducer.id,
+                        producerId:producer.id,
                         kind:R2consumer.kind,
                         rtpParameters:R2consumer.rtpParameters,
                     }
@@ -303,28 +308,48 @@ peers.on('connection' , async socket => { //'connection' event on peers
         }
     })
     socket.on('consumer-resume',async (mode)=>{//restart consumer's stream stop by 150 lines
-        console.log('consumer resume')
-        if(mode)
+        console.log('consumer resume',mode)
+        // if(mode)
+        // {
+        //     await consumer.resume()
+        // }
+        // else 
+        // {
             await R2consumer.resume()
-        else 
-            await consumer.resume()
+
+        // }
+
+        // const statsC = await R2consumerTransport.getStats();
+        // const statsP = await producerTransport.getStats();
+        // console.log('R2consumerTransport',statsC)
+        // console.log('producerTransport',statsP)
+        
+            
     })
     socket.on('PipeToRouter',async(callback)=>{
-        pipe1 = await router.createPipeTransport({listenIp:'140.118.107.177', enableRtx: true, enableSrtp: true,})
-        pipe2 = await router2.createPipeTransport({listenIp:'140.118.107.177', enableRtx: true, enableSrtp: true,})
-        await pipe1.connect({ip: pipe2.tuple.localIp, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
-        await pipe2.connect({ip: pipe1.tuple.localIp, port: pipe1.tuple.localPort, srtpParameters: pipe1.srtpParameters});
-        pipeConsumer = await pipe1.consume({ producerId: producer.id });
-        pipeProducer = await pipe2.produce({ id: producer.id,kind: producer.kind, rtpParameters: producer.rtpParameters});
-        console.log('pipeProducer:',pipeProducer.id)
-        const stats = await pipeConsumer.getStats();
-        console.log('pipeConsumer',stats)
-        // let PipeID = await router.pipeToRouter({
-        //     producerId:producer.id,
-        //     router:router2
-        // })
+        // pipe1 = await router.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
+        // pipe2 = await router2.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
+        // await pipe1.connect({ip: pipe2.tuple.localIp, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
+        // await pipe2.connect({ip: pipe1.tuple.localIp, port: pipe1.tuple.localPort, srtpParameters: pipe1.srtpParameters});
+        // pipeConsumer = await pipe1.consume({ producerId: producer.id });
+        // pipeProducer = await pipe2.produce({ id: producer.id,kind: producer.kind, rtpParameters: producer.rtpParameters});
+        // console.log('pipeProducer:',pipeProducer.id)
+        // const statsC = await pipeConsumer.getStats();
+        // const statsP = await pipeProducer.getStats();
+        // console.log('pipeConsumer',statsC)
+        // console.log('pipeProducer',statsP)
+
+        // await pipeConsumer.enableTraceEvent(["rtp", "fir", "pli","keyframe","nack"]);
+        // pipeConsumer.on("trace", (t) => {
+        //     console.log("pipeConsumer trace => ");
+        //     console.log(t);
+        // });
+        let PipeID = await router.pipeToRouter({
+            producerId:producer.id,
+            router:router2
+        })
         // console.log('pipeConsumer',temp)
-        callback(pipe1)
+        callback(PipeID)
         
     })
 })

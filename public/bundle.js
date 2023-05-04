@@ -17830,6 +17830,7 @@ let params2
 const streamSuccess = (stream)=>{ //success callback
     localVideo.srcObject = stream
     const track = stream.getVideoTracks()[0]
+    console.log(track)
     params = { //get video track add to params
         track,
         ...params
@@ -17936,7 +17937,6 @@ const createSendTransport=(mode)=>{
       document.querySelector('#R2_WebRtc_send_Transport_id').textContent = 'WebRtc "Send" Transport on router2 id: '+params.id
       R2producerTransport = device.createSendTransport(params2)
       WhichTransport = R2producerTransport
-      // dtlsParameters.role = 'server'
     }
     
     
@@ -18110,7 +18110,7 @@ const connectRecvTransport = async(mode)=>{
       document.querySelector('#Consumer_ID').textContent = 'Consumer ID :'+params.id
       document.querySelector('#Consume_Producer_ID').textContent = 'Consume from Producer :'+params.producerId
     }else{
-      console.log(params)
+      console.log('R2consumer',params)
       R2consumer = await R2consumerTransport.consume({
         id:params.id,
         producerId:params.producerId,
@@ -18125,8 +18125,9 @@ const connectRecvTransport = async(mode)=>{
     if (!mode){
       console.log('Consume for Remote Video')
       const{track} = R2consumer
+      console.log(track)
       remoteVideo.srcObject = new MediaStream([track])
-      socket.emit('consumer-resume',{mode:mode})  
+      socket.emit('consumer-resume',{mode})  
     }
     
   })

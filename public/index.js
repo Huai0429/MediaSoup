@@ -51,7 +51,7 @@ let params2
 const streamSuccess = (stream)=>{ //success callback
     localVideo.srcObject = stream
     const track = stream.getVideoTracks()[0]
-    console.log(track)
+    // console.log(track)
     params = { //get video track add to params
         track,
         ...params
@@ -113,8 +113,8 @@ const createDevice = async()=>{
       router2RtpCapabilities: rtpCapabilities2
     })
     console.log('Create Device')
-    console.log('Device RTP Capabilities',device.rtpCapabilities)
-    console.log('Device RTP Capabilities2',device.rtpCapabilities2)
+    // console.log('Device RTP Capabilities',device.rtpCapabilities)
+    // console.log('Device RTP Capabilities2',device.rtpCapabilities2)
     //after btn2 create device go btn3
     goCreateTransport()
 
@@ -129,8 +129,9 @@ const createDevice = async()=>{
 // after click button 2 getRtpCapabilities
 const getRtpCapabilities = ()=>{
   socket.emit('CreateRoom',(data)=>{
-    console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
-    console.log(`Router2 RTP Capabilities... ${data.rtpCapabilities2}`)
+    console.log('CreateRoom')
+    // console.log(`Router RTP Capabilities... ${data.rtpCapabilities}`)
+    // console.log(`Router2 RTP Capabilities... ${data.rtpCapabilities2}`)
     // document.querySelector('#Rtp_Capabilities').textContent = 'Rtp Capabilities: '+data.rtpCapabilities
     rtpCapabilities = data.rtpCapabilities
     rtpCapabilities2 = data.rtpCapabilities2
@@ -346,7 +347,7 @@ const connectRecvTransport = async(mode)=>{
     if (!mode){
       console.log('Consume for Remote Video')
       const{track} = R2consumer
-      console.log(track)
+      // console.log(track)
       remoteVideo.srcObject = new MediaStream([track])
       socket.emit('consumer-resume',{mode})  
     }

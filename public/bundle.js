@@ -17792,6 +17792,7 @@ socket.on('connection-success', ({ socketId }) => {
 
 let device
 let rtpCapabilities
+let rtpCapabilities2
 let producerTransport
 let consumerTransports = []
 let audioProducer
@@ -17845,6 +17846,7 @@ const joinRoom = () => {
     // we assign to local variable and will be used when
     // loading the client Device (see createDevice above)
     rtpCapabilities = data.rtpCapabilities
+    rtpCapabilities2 = data.rtpCapabilities2
 
     // once we have rtpCapabilities from the Router, create Device
     createDevice()
@@ -17907,7 +17909,7 @@ const createSendTransport = () => {
       return
     }
 
-    console.log(params)
+    console.log('createSendTransport:',params)
 
     // creates a new WebRTC Transport to send media
     // based on the server's producer transport params
@@ -17934,7 +17936,7 @@ const createSendTransport = () => {
     })
 
     producerTransport.on('produce', async (parameters, callback, errback) => {
-      console.log(parameters)
+      console.log('on Produce:',parameters)
 
       try {
         // tell the server to create a Producer
@@ -17968,21 +17970,22 @@ const connectSendTransport = async () => {
   // https://mediasoup.org/documentation/v3/mediasoup-client/api/#transport-produce
   // this action will trigger the 'connect' and 'produce' events above
   
-  audioProducer = await producerTransport.produce(audioParams);
+  //audioProducer
+  // audioProducer = await producerTransport.produce(audioParams);
+
+  // audioProducer.on('trackended', () => {
+  //   console.log('audio track ended')
+
+  //   // close audio track
+  // })
+
+  // audioProducer.on('transportclose', () => {
+  //   console.log('audio transport ended')
+
+  //   // close audio track
+  // })
+
   videoProducer = await producerTransport.produce(videoParams);
-
-  audioProducer.on('trackended', () => {
-    console.log('audio track ended')
-
-    // close audio track
-  })
-
-  audioProducer.on('transportclose', () => {
-    console.log('audio transport ended')
-
-    // close audio track
-  })
-  
   videoProducer.on('trackended', () => {
     console.log('video track ended')
 
@@ -17994,6 +17997,19 @@ const connectSendTransport = async () => {
 
     // close video track
   })
+  console.log('Start to pipe')
+  pipetorouter(videoProducer)
+  console.log('pipe complete')
+}
+
+const pipetorouter = async (Producer)=>{
+  try{
+    await socket.emit('PipeToRouter',{Producer},(PipeID)=>{
+      console.log('Pipe ID:',PipeID)
+    })
+  }catch(error){
+    console.log('Pipe To Router error',error)
+  }
 }
 
 const signalNewConsumerTransport = async (remoteProducerId) => {

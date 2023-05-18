@@ -39,7 +39,7 @@ const webRtcTransport_options = {
     listenIps:[
         {
             ip:'0.0.0.0',//replace by relevant IP address
-            announcedIp: '140.118.107.177',//host machine IP
+            announcedIp: '140.118.107.208',//host machine IP
         }
     ],
     enableUdp:true,
@@ -151,17 +151,6 @@ peers.on('connection' , async socket => { //'connection' event on peers
         rtpCapabilities2 = router2.rtpCapabilities
         callback({rtpCapabilities,rtpCapabilities2})// call back for emit in index.js
     }
-
-    // call from 'const getRtpCapabilities' from index.js
-    // socket.on('getRtpCapabilities',(callback)=>{  
-
-    //     const rtpCapabilities = router.rtpCapabilities
-    //     console.log('"getRtpCapabilities" Event from app.js')
-    //     // console.log(`rtp Capabilities${rtpCapabilities.codecs}`)
-
-    //     callback({rtpCapabilities}) // call back for emit in index.js 
-    // })
-
     //call from const createSendTransport (button 3)
     socket.on('createWebRtcTransport',async ({sender,mode},callback)=>{
         console.log(`Is this a sender request? ${sender}`)
@@ -241,11 +230,11 @@ peers.on('connection' , async socket => { //'connection' event on peers
             if(mode)
             {
                 if(router.canConsume({
-                    producerId:producer.id,
+                    producerId:R2producer.id,
                     rtpCapabilities,
                 })){
                     consumer = await consumerTransport.consume({
-                        producerId:producer.id,
+                        producerId:R2producer.id,
                         rtpCapabilities,
                         paused:true,
                     })
@@ -257,7 +246,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
                     })
                     const params = {
                         id:consumer.id,
-                        producerId:producer.id,
+                        producerId:R2producer.id,
                         kind:consumer.kind,
                         rtpParameters:consumer.rtpParameters,
                     }
@@ -307,17 +296,16 @@ peers.on('connection' , async socket => { //'connection' event on peers
             })
         }
     })
-    socket.on('consumer-resume',async (mode)=>{//restart consumer's stream stop by 150 lines
+    socket.on('consumer-resume',async ({mode})=>{//restart consumer's stream stop by 150 lines
         console.log('consumer resume',mode)
-        // if(mode)
-        // {
-        //     await consumer.resume()
-        // }
-        // else 
-        // {
+        if(mode)
+        {
+            await consumer.resume()
+        }
+        else 
+        {
             await R2consumer.resume()
-
-        // }
+        }
 
         // const statsC = await R2consumerTransport.getStats();
         // const statsP = await producerTransport.getStats();
@@ -326,7 +314,7 @@ peers.on('connection' , async socket => { //'connection' event on peers
         
             
     })
-    socket.on('PipeToRouter',async(callback)=>{
+    socket.on('PipeToRouter',async({check},callback)=>{
         // pipe1 = await router.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
         // pipe2 = await router2.createPipeTransport({listenIp:'0.0.0.0', enableRtx: true, enableSrtp: true,})
         // await pipe1.connect({ip: pipe2.tuple.localIp, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
@@ -344,13 +332,21 @@ peers.on('connection' , async socket => { //'connection' event on peers
         //     console.log("pipeConsumer trace => ");
         //     console.log(t);
         // });
-        let PipeID = await router.pipeToRouter({
-            producerId:producer.id,
-            router:router2
-        })
-        // console.log('pipeConsumer',temp)
-        callback(PipeID)
-        
+        console.log('check = ',check);
+
+        if(check){
+           let PipeID = await router.pipeToRouter({
+                producerId:producer.id,
+                router:router2
+            }) 
+            callback(PipeID)
+        }else{
+            let PipeID = await router2.pipeToRouter({
+                producerId:R2producer.id,
+                router:router
+            }) 
+            callback(PipeID)
+        }
     })
 })
 

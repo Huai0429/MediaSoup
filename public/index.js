@@ -16,7 +16,7 @@ let R2producerTransport
 let R2producer
 let R2consumer
 let WhichTransport
-
+var check = true;
 socket.on('connection-success' , ({ socketId,existsProducer }) => { //'connection-success' event
     console.log(socketId,existsProducer)
     document.querySelector('#socketID').textContent = 'socketID: '+socketId
@@ -56,7 +56,6 @@ const streamSuccess = (stream)=>{ //success callback
         track,
         ...params
     }
-
     goConnect(true)
 }
 
@@ -89,16 +88,21 @@ const goConnect = (ProducerOrConsumer)=>{
 
 async function goCreateTransport(){
   if(isProducer){
-    createSendTransport(true)
-    // await delay(50);
-    // createRecvTransport(false,true)
-    // createRecvTransport(true)
-    // await delay(50);
-    // createSendTransport(false)//R2
+    if(check)
+    {
+      createSendTransport(true)
+    }else {
+      createSendTransport(false)
+    }
   }else{
-    createRecvTransport(false,true)
-    // createRecvTransport(true,false)
-    //createSendTransport(false)
+    if(check)
+    {
+      createRecvTransport(false,true)
+    }
+    else 
+    {
+      createRecvTransport(true,true)
+    }
   }
 }
 
@@ -219,7 +223,7 @@ const createSendTransport=(mode)=>{
 
 const connectSendTransport = async(mode)=>{
   if(mode){
-    producer = await WhichTransport.produce(params) // produce connect-1
+    producer = await producerTransport.produce(params) // produce connect-1
     producer.on('trackended',()=>{
       console.log('track ended')
 
@@ -232,7 +236,8 @@ const connectSendTransport = async(mode)=>{
       // close video track
     })
   }else{
-    R2producer = await WhichTransport.produce(params) // produce connect-1
+    R2producer = await R2producerTransport.produce(params) // produce connect-1
+    console.log(R2producer.id)
     R2producer.on('trackended',()=>{
       console.log('track ended')
 
@@ -246,20 +251,15 @@ const connectSendTransport = async(mode)=>{
     })
   }
   try{
-    await socket.emit('PipeToRouter',(PipeID)=>{
+    await socket.emit('PipeToRouter',({check:check}),(PipeID)=>{
       console.log('PipeID',PipeID)
-      // console.log('Pipe2',Pipe2)
-
     })
   }catch(error){
     console.log('PipeToRouter error')
     console.log(error)
   }
   console.log('Pipe to Router complete')
-  
-  
-    // createSendTransport(false)//R2
-  // goConsume()
+
 }
 
 
@@ -349,9 +349,9 @@ const connectRecvTransport = async(mode)=>{
       const{track} = R2consumer
       // console.log(track)
       remoteVideo.srcObject = new MediaStream([track])
-      socket.emit('consumer-resume',{mode})  
-    }
-    
+      socket.emit('consumer-resume',({mode}))  
+    }else
+      check = false
   })
 }
 

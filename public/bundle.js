@@ -17799,6 +17799,8 @@ let audioProducer
 let videoProducer
 let consumer
 let isProducer = false
+let OnRouter1 = true
+let PipeID
 
 // https://mediasoup.org/documentation/v3/mediasoup-client/api/#ProducerOptions
 // https://mediasoup.org/documentation/v3/mediasoup-client/api/#transport-produce
@@ -17855,7 +17857,7 @@ const joinRoom = () => {
 
 const getLocalStream = () => {
   navigator.mediaDevices.getUserMedia({
-    audio: true,
+    audio: false,
     video: {
       width: {
         min: 640,
@@ -17901,7 +17903,7 @@ const createDevice = async () => {
 const createSendTransport = () => {
   // see server's socket.on('createWebRtcTransport', sender?, ...)
   // this is a call from Producer, so sender = true
-  socket.emit('createWebRtcTransport', { consumer: false }, ({ params }) => {
+  socket.emit('createWebRtcTransport', { consumer: false ,OnRouter:OnRouter1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -17943,23 +17945,27 @@ const createSendTransport = () => {
         // with the following parameters and produce
         // and expect back a server side producer id
         // see server's socket.on('transport-produce', ...)
-        await socket.emit('transport-produce', {
+        await socket.emit('transport-produce', { //create producer & add it
           kind: parameters.kind,
           rtpParameters: parameters.rtpParameters,
           appData: parameters.appData,
+          OnRouter: OnRouter1,
         }, ({ id, producersExist }) => {
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({ id })
+          console.log('Start to pipe',id)
+          PipeID = pipetorouter(id,OnRouter=OnRouter1)
+          console.log('pipe complete')
 
           // if producers exist, then join room
-          if (producersExist) getProducers()
+          if (producersExist) getProducers(OnRouter=OnRouter1)
         })
       } catch (error) {
         errback(error)
       }
     })
-
+   
     connectSendTransport()
   })
 }
@@ -17997,15 +18003,15 @@ const connectSendTransport = async () => {
 
     // close video track
   })
-  console.log('Start to pipe')
-  pipetorouter(videoProducer)
-  console.log('pipe complete')
+
 }
 
-const pipetorouter = async (Producer)=>{
+const pipetorouter = async (id,OnRouter)=>{
   try{
-    await socket.emit('PipeToRouter',{Producer},(PipeID)=>{
+    console.log('pipetorouter',OnRouter)
+    await socket.emit('PipeToRouter',{id,OnRouter},(PipeID)=>{
       console.log('Pipe ID:',PipeID)
+      return PipeID
     })
   }catch(error){
     console.log('Pipe To Router error',error)
@@ -18017,14 +18023,14 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
   if (consumingTransports.includes(remoteProducerId)) return;
   consumingTransports.push(remoteProducerId);
 
-  await socket.emit('createWebRtcTransport', { consumer: true }, ({ params }) => {
+  await socket.emit('createWebRtcTransport', { consumer: true ,OnRouter: false}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
       console.log(params.error)
       return
     }
-    console.log(`PARAMS... ${params}`)
+    console.log(`PARAMS... ${params.id}`)
 
     let consumerTransport
     try {
@@ -18061,12 +18067,13 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
 // server informs the client of a new producer just joined
 socket.on('new-producer', ({ producerId }) => signalNewConsumerTransport(producerId))
 
-const getProducers = () => {
-  socket.emit('getProducers', producerIds => {
-    console.log(producerIds)
+const getProducers = async(OnRouter) => {
+  // socket.emit('getProducers', producerIds => {
+  socket.emit('getPipeProducers', producerIds => {
+    console.log('getPipeProducers',producerIds)
     // for each of the producer create a consumer
     // producerIds.forEach(id => signalNewConsumerTransport(id))
-    producerIds.forEach(signalNewConsumerTransport)
+    producerIds.id.forEach(signalNewConsumerTransport)
   })
 }
 
@@ -18078,6 +18085,7 @@ const connectRecvTransport = async (consumerTransport, remoteProducerId, serverC
     rtpCapabilities: device.rtpCapabilities,
     remoteProducerId,
     serverConsumerTransportId,
+    OnRouter: false,
   }, async ({ params }) => {
     if (params.error) {
       console.log('Cannot Consume')
@@ -18143,6 +18151,9 @@ socket.on('producer-closed', ({ remoteProducerId }) => {
   // remove the video div element
   videoContainer.removeChild(document.getElementById(`td-${remoteProducerId}`))
 })
+function delay(time) {
+  return new Promise(resolve => setTimeout(resolve, time));
+}
 },{"mediasoup-client":64,"socket.io-client":78}],93:[function(require,module,exports){
 'use strict'
 

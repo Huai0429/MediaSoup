@@ -17849,7 +17849,8 @@ const joinRoom = () => {
     // loading the client Device (see createDevice above)
     rtpCapabilities = data.rtpCapabilities
     rtpCapabilities2 = data.rtpCapabilities2
-
+    OnRouter1 = data.selector
+    console.log('joinRoom',OnRouter1)
     // once we have rtpCapabilities from the Router, create Device
     createDevice()
   })
@@ -18025,7 +18026,7 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
   if (consumingTransports.includes(remoteProducerId)) return;
   consumingTransports.push(remoteProducerId);
 
-  await socket.emit('createWebRtcTransport', { consumer: true ,OnRouter: false}, ({ params }) => {
+  await socket.emit('createWebRtcTransport', { consumer: true ,OnRouter: OnRouter1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -18087,7 +18088,7 @@ const connectRecvTransport = async (consumerTransport, remoteProducerId, serverC
     rtpCapabilities: device.rtpCapabilities,
     remoteProducerId,
     serverConsumerTransportId,
-    OnRouter: false,
+    OnRouter: OnRouter1,
   }, async ({ params }) => {
     if (params.error) {
       console.log('Cannot Consume')

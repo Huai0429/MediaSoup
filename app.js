@@ -161,12 +161,13 @@ connections.on('connection', async socket => {
         isAdmin: false,   // Is this Peer the Admin?
       }
     }
-
+    const selector = Object.keys(peers).length%2==0?false:true
+    console.log('Selector: ',selector)
     // get Router RTP Capabilities
     const rtpCapabilities = router1.rtpCapabilities
     const rtpCapabilities2 = router2.rtpCapabilities
     // call callback from the client and send back the rtpCapabilities
-    callback({ rtpCapabilities ,rtpCapabilities2})
+    callback({ rtpCapabilities ,rtpCapabilities2,selector})
   })
 
   const createRoom = async (roomName, socketId) => {
@@ -386,7 +387,7 @@ connections.on('connection', async socket => {
     // let all consumers to consume this producer
     if(onRouter)
     {
-      producers.forEach(producerData => {
+      pipeproducers.forEach(producerData => {
         if (producerData.socketId !== socketId && producerData.roomName === roomName) {
           const producerSocket = peers[producerData.socketId].socket
           // use socket to send producer id to producer

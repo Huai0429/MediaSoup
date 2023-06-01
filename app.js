@@ -122,10 +122,12 @@ connections.on('connection', async socket => {
 
   socket.on('disconnect', () => {
     // do some cleanup
-    console.log('peer disconnected',peers.length)
+    console.log('peer disconnected')
     if(peers!==undefined){
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
+      pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
+      pipeconsumers = removeItems(pipeconsumers, socket.id, 'consumer')
       transports = removeItems(transports, socket.id, 'transport')
       const { roomName } = peers[socket.id]
       delete peers[socket.id]
@@ -139,6 +141,7 @@ connections.on('connection', async socket => {
   })
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
+    console.log('new peers join \'',roomName,'\'')
     // create Router if it does not exist
     // const router1 = rooms[roomName] && rooms[roomName].get('data').router || await createRoom(roomName, socket.id)
     const [router1,router2] = await createRoom(roomName, socket.id)
@@ -217,14 +220,9 @@ connections.on('connection', async socket => {
   // We need to differentiate between the producer and consumer transports
   socket.on('createWebRtcTransport', async ({ consumer ,OnRouter}, callback) => {
     // get Room Name from Peer's properties
-    const roomName = peers[socket.id].roomName
-
-    // get Router (Room) object this peer is in based on RoomName
-    // const router1 = rooms[roomName].router[0]
-    // const router2 = rooms[roomName].router[1]
-    
+    const roomName = peers[socket.id].roomName   
     const router = OnRouter? rooms[roomName].router[0]:rooms[roomName].router[1]
-    console.log('createWebRtcTransport',consumer,OnRouter,router.id)
+    console.log('createWebRtcTransport for consumer',consumer,'on Router :',router.id)
     createWebRtcTransport(router).then(
       transport => {
         callback({
@@ -265,7 +263,7 @@ connections.on('connection', async socket => {
       ...producers,
       { socketId: socket.id, producer, roomName, OnRouter}
     ]
-    console.log('addProducer',OnRouter)
+    // console.log('addProducer',OnRouter)
     peers[socket.id] = {
       ...peers[socket.id],
       producers: [
@@ -377,22 +375,36 @@ connections.on('connection', async socket => {
         // producerList = [...producerList,producerData.producer.id]
       }
     })
-    console.log('PipeproducerList',PipeproducerList)
+    console.log('Current PipeproducerList',PipeproducerList)
     // return the producer list back to the client
     callback(PipeproducerList)
   })
 
-  const informConsumers = (roomName, socketId, id) => {
-    console.log(`just joined, id ${id} ${roomName}, ${socketId}`)
+  const informConsumers = (roomName, socketId, id,onRouter) => {
+    console.log(`${socketId} just join ${roomName} id ${id}`)
     // A new producer just joined
     // let all consumers to consume this producer
-    producers.forEach(producerData => {
-      if (producerData.socketId !== socketId && producerData.roomName === roomName) {
-        const producerSocket = peers[producerData.socketId].socket
-        // use socket to send producer id to producer
-        producerSocket.emit('new-producer', { producerId: id })
-      }
-    })
+    if(onRouter)
+    {
+      producers.forEach(producerData => {
+        if (producerData.socketId !== socketId && producerData.roomName === roomName) {
+          const producerSocket = peers[producerData.socketId].socket
+          // use socket to send producer id to producer
+          producerSocket.emit('new-producer', { producerId: id })
+        }
+      })
+    }
+    else
+    {
+      pipeproducers.forEach(producerData => {
+        if (producerData.socketId !== socketId && producerData.roomName === roomName) {
+          const producerSocket = peers[producerData.socketId].socket
+          // use socket to send producer id to producer
+          producerSocket.emit('new-producer', { producerId: id })
+        }
+      })
+    }
+    
   }
 
   const getTransport = (socketId) => {
@@ -417,10 +429,9 @@ connections.on('connection', async socket => {
 
     // add producer to the producers array
     const { roomName } = peers[socket.id]
-    console.log('transport-produce',OnRouter)
     addProducer(producer, roomName, OnRouter)
 
-    // informConsumers(roomName, socket.id, producer.id)
+    // informConsumers(roomName, socket.id, producer.id,OnRouter)
 
     console.log('Producer ID: ', producer.id, producer.kind)
 
@@ -447,10 +458,9 @@ connections.on('connection', async socket => {
 
   socket.on('consume', async ({ rtpCapabilities, remoteProducerId, serverConsumerTransportId, OnRouter }, callback) => {
     try {
-
       const { roomName } = peers[socket.id]
       const router = OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
-      console.log('consume',OnRouter,router.id)
+      console.log('On ',router.id,'consume ',remoteProducerId)
       let consumerTransport = transports.find(transportData => (
         transportData.consumer && transportData.transport.id == serverConsumerTransportId
       )).transport
@@ -514,9 +524,10 @@ connections.on('connection', async socket => {
 
   socket.on('PipeToRouter', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
-    console.log('PipeToRouter',Producer.OnRouter)
+    console.log('PipeToRouter Dir :',Producer.OnRouter)
     const From = Producer.OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
     const To = Producer.OnRouter?rooms[roomName].router[1]:rooms[roomName].router[0]
+    console.log('Pipe from ',From.id,' To ',To.id)
     // let producerList = []
     // producers.forEach(producerData => {
     //   if (producerData.socketId !== socket.id && producerData.roomName === roomName) {
@@ -532,8 +543,7 @@ connections.on('connection', async socket => {
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
 
   addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnRouter)
-
-  // informConsumers(roomName, socket.id, PipeID.pipeProducer.id)
+  informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter)
 
 
   callback(PipeID)
@@ -558,7 +568,7 @@ const createWebRtcTransport = async (router) => {
 
       // https://mediasoup.org/documentation/v3/mediasoup/api/#router-createWebRtcTransport
       let transport = await router.createWebRtcTransport(webRtcTransport_options)
-      console.log(`transport id: ${transport.id}`)
+      console.log(`Create transport : ${transport.id}, on ${router.id}`)
 
       transport.on('dtlsstatechange', dtlsState => {
         if (dtlsState === 'closed') {

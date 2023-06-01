@@ -132,8 +132,6 @@ const createSendTransport = () => {
       return
     }
 
-    console.log('createSendTransport:',params)
-
     // creates a new WebRTC Transport to send media
     // based on the server's producer transport params
     // https://mediasoup.org/documentation/v3/mediasoup-client/api/#TransportOptions
@@ -175,23 +173,25 @@ const createSendTransport = () => {
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({ id })
-          console.log('Start to pipe',id)
-          PipeID = pipetorouter(id,OnRouter=OnRouter1)
-          console.log('pipe complete')
 
+          console.log('Start to pipe')
+          PipeID = pipetorouter(id,OnRouter1)
+          console.log('pipe complete')
+          
+          
           // if producers exist, then join room
-          if (producersExist) getProducers(OnRouter=OnRouter1)
+          if (producersExist) getProducers(OnRouter1)
         })
       } catch (error) {
         errback(error)
       }
     })
    
-    connectSendTransport()
+    connectSendTransport(OnRouter1)
   })
 }
 
-const connectSendTransport = async () => {
+const connectSendTransport = async (OnRouter) => {
   // we now call produce() to instruct the producer transport
   // to send media to the Router
   // https://mediasoup.org/documentation/v3/mediasoup-client/api/#transport-produce
@@ -224,12 +224,14 @@ const connectSendTransport = async () => {
 
     // close video track
   })
+  console.log('Connect Producer successful')
+
 
 }
 
 const pipetorouter = async (id,OnRouter)=>{
   try{
-    console.log('pipetorouter',OnRouter)
+    console.log('PipeToRouter Dir',OnRouter)
     await socket.emit('PipeToRouter',{id,OnRouter},(PipeID)=>{
       console.log('Pipe ID:',PipeID)
       return PipeID

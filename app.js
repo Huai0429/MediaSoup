@@ -58,15 +58,17 @@ let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
 let pipeproducers = []
 let pipeconsumers = []
+var R1count = 0,R2count = 0;
+let selector = true
 
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
     rtcMinPort: 2000,
-    rtcMaxPort: 2100,//2020,
+    rtcMaxPort: 2020,//2020,
   })
   worker2 = await mediasoup.createWorker({
     rtcMinPort: 3000,
-    rtcMaxPort: 3100,//3020,
+    rtcMaxPort: 3020,//3020,
   })
   console.log(`worker pid ${worker.pid},${worker2.pid}`)
 
@@ -123,7 +125,9 @@ connections.on('connection', async socket => {
   socket.on('disconnect', () => {
     // do some cleanup
     console.log('peer disconnected')
-    if(peers!==undefined){
+    if(peers[socket.id]!==undefined){
+      if(peers[socket.id].OnRouter_P[0]) {R1count--;}
+      else {R2count--;}
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
       pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
@@ -137,7 +141,11 @@ connections.on('connection', async socket => {
         router: rooms[roomName].router,
         peers: rooms[roomName].peers.filter(socketId => socketId !== socket.id)
       }
+      console.log('Clean complete')
     }
+    console.log('after leave',R1count+R2count,selector)
+    console.log('R1:',R1count)
+    console.log('R2:',R2count)
   })
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
@@ -161,8 +169,10 @@ connections.on('connection', async socket => {
         isAdmin: false,   // Is this Peer the Admin?
       }
     }
-    const selector = Object.keys(peers).length%2==0?false:true
-    console.log('Selector: ',selector)
+    // selector = Object.keys(peers).length%2==0?false:true
+    selector = R1count>R2count?false:true
+    // selector = R1count>6?false:true
+    console.log('Selector: ',selector,R1count,R2count)
     // get Router RTP Capabilities
     const rtpCapabilities = router1.rtpCapabilities
     const rtpCapabilities2 = router2.rtpCapabilities
@@ -276,6 +286,11 @@ connections.on('connection', async socket => {
         OnRouter,
       ]
     }
+    if(peers[socket.id].OnRouter_P[0]) R1count++;
+    else R2count++;
+    console.log('after join',R1count+R2count,peers[socket.id].OnRouter_P[0])
+    console.log('R1:',R1count)
+    console.log('R2:',R2count)
   }
   const addPipe = (producer,consumer, roomName,Dir) => {
     pipeproducers = [
@@ -346,7 +361,7 @@ connections.on('connection', async socket => {
         // producerList = [...producerList,producerData.producer.id]
       }
     })
-    console.log('producerList',producerList)
+    // console.log('producerList',producerList)
     // return the producer list back to the client
     callback(producerList)
   })
@@ -376,7 +391,7 @@ connections.on('connection', async socket => {
         // producerList = [...producerList,producerData.producer.id]
       }
     })
-    console.log('Current PipeproducerList',PipeproducerList)
+    // console.log('Current PipeproducerList',PipeproducerList)
     // return the producer list back to the client
     callback(PipeproducerList)
   })

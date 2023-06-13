@@ -51,6 +51,7 @@ const connections = io.of('/mediasoup')
  **/
 let worker
 let worker2
+let worker3
 let rooms = {}          // { roomName1: { Router, rooms: [ sicketId1, ... ] }, ...}
 let peers = {}          // { socketId1: { roomName1, socket, transports = [id1, id2,] }, producers = [id1, id2,] }, consumers = [id1, id2,], peerDetails }, ...}
 let transports = []     // [ { socketId1, roomName1, transport, consumer }, ... ]
@@ -58,31 +59,45 @@ let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
 let pipeproducers = []
 let pipeconsumers = []
-var R1count = 0,R2count = 0;
-let selector = true
+var R1count = 0,R2count = 0,R3count = 0;
+let selector = 1
 
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
-    rtcMinPort: 2000,
-    rtcMaxPort: 2020,//2020,
+    // rtcMinPort: 2000,
+    // rtcMaxPort: 2018,//2020,
   })
   worker2 = await mediasoup.createWorker({
-    rtcMinPort: 3000,
-    rtcMaxPort: 3020,//3020,
+    // rtcMinPort: 3000,
+    // rtcMaxPort: 3018,//3020,
   })
-  console.log(`worker pid ${worker.pid},${worker2.pid}`)
+  worker3 = await mediasoup.createWorker({
+    // rtcMinPort: 4000,
+    // rtcMaxPort: 4018,//4020,
+  })
+  console.log(`worker pid ${worker.pid},${worker2.pid},${worker3.pid}`)
 
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')
     setTimeout(() => process.exit(1), 2000) // exit in 2 seconds
   })
+  worker2.on('died', error => {
+    // This implies something serious happened, so kill the application
+    console.error('mediasoup worker2 has died')
+    setTimeout(() => process.exit(1), 2000) // exit in 2 seconds
+  })
+  worker3.on('died', error => {
+    // This implies something serious happened, so kill the application
+    console.error('mediasoup worker3 has died')
+    setTimeout(() => process.exit(1), 2000) // exit in 2 seconds
+  })
 
-  return worker,worker2
+  return worker,worker2,worker3
 }
 
 // We create a Worker as soon as our application starts
-worker ,worker2 = createWorker()
+worker ,worker2, worker3 = createWorker()
 
 // This is an Array of RtpCapabilities
 // https://mediasoup.org/documentation/v3/mediasoup/rtp-parameters-and-capabilities/#RtpCodecCapability
@@ -143,16 +158,17 @@ connections.on('connection', async socket => {
       }
       console.log('Clean complete')
     }
-    console.log('after leave',R1count+R2count,selector)
+    console.log('after leave',R1count+R2count+R3count,selector)
     console.log('R1:',R1count)
     console.log('R2:',R2count)
+    console.log('R3:',R3count)
   })
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
     console.log('new peers join \'',roomName,'\'')
     // create Router if it does not exist
     // const router1 = rooms[roomName] && rooms[roomName].get('data').router || await createRoom(roomName, socket.id)
-    const [router1,router2] = await createRoom(roomName, socket.id)
+    const [router1,router2,router3] = await createRoom(roomName, socket.id)
     // const router2 = await createRoom(roomName, socket.id,1)
     peers[socket.id] = {
       socket,
@@ -170,9 +186,16 @@ connections.on('connection', async socket => {
       }
     }
     // selector = Object.keys(peers).length%2==0?false:true
-    selector = R1count>R2count?false:true
-    // selector = R1count>6?false:true
-    console.log('Selector: ',selector,R1count,R2count)
+    // selector = R1count>R2count?false:true
+    if (R1count<=R2count&&R1count<=R3count)
+      selector = 1
+    else if(R2count<=R1count&&R2count<=R3count)
+      selector = 2
+    else 
+      selector = 3
+
+    // selector = R1count>R2count?false:true
+    console.log('Selector: ',selector,R1count,R2count,R3count)
     // get Router RTP Capabilities
     const rtpCapabilities = router1.rtpCapabilities
     const rtpCapabilities2 = router2.rtpCapabilities
@@ -188,23 +211,25 @@ connections.on('connection', async socket => {
     // none of the two are required
     let router1
     let router2
+    let router3
     let peers = []
     if (rooms[roomName]) {
       router1 = rooms[roomName].router[0]
       router2 = rooms[roomName].router[1]
+      router3 = rooms[roomName].router[2]
       peers = rooms[roomName].peers || []
     } else {
       router1 = await worker.createRouter({ mediaCodecs, })
       router2 = await worker2.createRouter({ mediaCodecs, })
+      router3 = await worker3.createRouter({ mediaCodecs, })
     }
-    
-    console.log(`Router ID: ${router1.id},${router2.id}`, peers.length)
+    console.log(`Router ID: ${router1.id},${router2.id},${router3.id}`, peers.length)
 
     rooms[roomName] = {
-      router: [router1,router2],
+      router: [router1,router2,router3],
       peers: [...peers, socketId],
     }
-    return [router1,router2]
+    return [router1,router2,router3]
   }
 
   // socket.on('createRoom', async (callback) => {
@@ -231,8 +256,24 @@ connections.on('connection', async socket => {
   // We need to differentiate between the producer and consumer transports
   socket.on('createWebRtcTransport', async ({ consumer ,OnRouter}, callback) => {
     // get Room Name from Peer's properties
-    const roomName = peers[socket.id].roomName   
-    const router = OnRouter? rooms[roomName].router[0]:rooms[roomName].router[1]
+    const roomName = peers[socket.id].roomName
+    let router = rooms[roomName].router[0]
+    console.log('createWebRtcTransport',OnRouter)
+    switch(OnRouter){
+      case 1:
+        router = rooms[roomName].router[0];
+        break;
+      case 2:
+        router = rooms[roomName].router[1];
+        break;
+      case 3:
+        router = rooms[roomName].router[2];
+        break;
+      default:
+        router = rooms[roomName].router[0];
+        break;
+    }
+    // const router = OnRouter? rooms[roomName].router[0]:rooms[roomName].router[1]
     console.log('createWebRtcTransport for consumer',consumer,'on Router :',router.id)
     createWebRtcTransport(router).then(
       transport => {
@@ -269,7 +310,7 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addProducer = (producer, roomName,OnRouter) => {
+  const addProducer = (producer, roomName,OnRouter,Dir) => {
     producers = [
       ...producers,
       { socketId: socket.id, producer, roomName, OnRouter}
@@ -284,22 +325,27 @@ connections.on('connection', async socket => {
       OnRouter_P: [
         ...peers[socket.id].OnRouter_P,
         OnRouter,
+        Dir,
       ]
     }
-    if(peers[socket.id].OnRouter_P[0]) R1count++;
-    else R2count++;
-    console.log('after join',R1count+R2count,peers[socket.id].OnRouter_P[0])
+    console.log('addProducer',peers[socket.id].OnRouter_P)
+    if(OnRouter===1) R1count++;
+    else if(OnRouter===2) R2count++;
+    else if(OnRouter===3) R3count++;
+    
+    console.log('after join',R1count+R2count+R3count,OnRouter)
     console.log('R1:',R1count)
     console.log('R2:',R2count)
+    console.log('R3:',R3count)
   }
-  const addPipe = (producer,consumer, roomName,Dir) => {
+  const addPipe = (producer,consumer, roomName,site,Dir) => {
     pipeproducers = [
       ...pipeproducers,
-      { socketId: socket.id, producer, roomName, Dir}
+      { socketId: socket.id, producer, roomName, site, Dir}
     ]
     pipeconsumers = [
       ...pipeconsumers,
-      { socketId: socket.id, consumer, roomName, Dir}
+      { socketId: socket.id, consumer, roomName, site, Dir}
     ]
 
     peers[socket.id] = {
@@ -315,11 +361,11 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addConsumer = (consumer, roomName,OnRouter) => {
+  const addConsumer = (consumer, roomName,site,Dir) => {
     // add the consumer to the consumers list
     consumers = [
       ...consumers,
-      { socketId: socket.id, consumer, roomName, OnRouter,}
+      { socketId: socket.id, consumer, roomName, site, Dir}
     ]
 
     // add the consumer id to the peers list
@@ -331,7 +377,8 @@ connections.on('connection', async socket => {
       ],
       OnRouter_C: [
         ...peers[socket.id].OnRouter_C,
-        OnRouter,
+        site,
+        Dir,
       ]
     }
   }
@@ -396,7 +443,7 @@ connections.on('connection', async socket => {
     callback(PipeproducerList)
   })
 
-  const informConsumers = (roomName, socketId, id,onRouter) => {
+  const informConsumers = (roomName, socketId, id,onRouter,Dir) => {
     console.log(`${socketId} just join ${roomName} id ${id}`)
     // A new producer just joined
     // let all consumers to consume this producer
@@ -436,8 +483,9 @@ connections.on('connection', async socket => {
   })
 
   // see client's socket.emit('transport-produce', ...)
-  socket.on('transport-produce', async ({ kind, rtpParameters, appData, OnRouter}, callback) => {
+  socket.on('transport-produce', async ({ kind, rtpParameters, appData, OnRouter, Dir}, callback) => {
     // call produce based on the prameters from the client
+    console.log('transport-produce',OnRouter,Dir)
     const producer = await getTransport(socket.id).produce({
       kind,
       rtpParameters,
@@ -445,7 +493,7 @@ connections.on('connection', async socket => {
 
     // add producer to the producers array
     const { roomName } = peers[socket.id]
-    addProducer(producer, roomName, OnRouter)
+    addProducer(producer, roomName, OnRouter,Dir)
 
     // informConsumers(roomName, socket.id, producer.id,OnRouter)
 
@@ -472,10 +520,25 @@ connections.on('connection', async socket => {
     await consumerTransport.connect({ dtlsParameters })
   })
 
-  socket.on('consume', async ({ rtpCapabilities, remoteProducerId, serverConsumerTransportId, OnRouter }, callback) => {
+  socket.on('consume', async ({ rtpCapabilities, remoteProducerId, serverConsumerTransportId, OnRouter ,Dir}, callback) => {
     try {
       const { roomName } = peers[socket.id]
-      const router = OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
+      // const router = OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
+      let router = rooms[roomName].router[0]
+      switch(OnRouter){
+        case 1:
+          router = rooms[roomName].router[0];
+          break;
+        case 2:
+          router = rooms[roomName].router[1];
+          break;
+        case 3:
+          router = rooms[roomName].router[2];
+          break;
+        default:
+          router = rooms[roomName].router[0];
+          break;
+      }
       console.log('On ',router.id,'consume ',remoteProducerId)
       let consumerTransport = transports.find(transportData => (
         transportData.consumer && transportData.transport.id == serverConsumerTransportId
@@ -507,7 +570,7 @@ connections.on('connection', async socket => {
           consumers = consumers.filter(consumerData => consumerData.consumer.id !== consumer.id)
         })
 
-        addConsumer(consumer, roomName,OnRouter)
+        addConsumer(consumer, roomName,OnRouter,Dir)
 
         // from the consumer extract the following params
         // to send back to the Client
@@ -540,9 +603,34 @@ connections.on('connection', async socket => {
 
   socket.on('PipeToRouter', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
-    console.log('PipeToRouter Dir :',Producer.OnRouter)
-    const From = Producer.OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
-    const To = Producer.OnRouter?rooms[roomName].router[1]:rooms[roomName].router[0]
+    console.log('PipeToRouter Dir :',Producer.OnRouter,Producer.consumer)
+    let From = Producer.OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
+    let To = Producer.OnRouter?rooms[roomName].router[1]:rooms[roomName].router[0]
+    if(Producer.OnRouter===1){
+      if(Producer.consumer===false){
+        From = rooms[roomName].router[0]
+        To = rooms[roomName].router[1]
+      }else{
+        From = rooms[roomName].router[1]
+        To = rooms[roomName].router[0]
+      }
+    }else if(Producer.OnRouter===2){
+      if(Producer.consumer===false){
+        From = rooms[roomName].router[1]
+        To = rooms[roomName].router[2]
+      }else{
+        From = rooms[roomName].router[2]
+        To = rooms[roomName].router[1]
+      }
+    }else if(Producer.OnRouter===3){
+      if(Producer.consumer===false){
+        From = rooms[roomName].router[2]
+        To = rooms[roomName].router[0]
+      }else{
+        From = rooms[roomName].router[0]
+        To = rooms[roomName].router[2]
+      }
+    }
     console.log('Pipe from ',From.id,' To ',To.id)
     // let producerList = []
     // producers.forEach(producerData => {
@@ -558,8 +646,8 @@ connections.on('connection', async socket => {
 
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
 
-  addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnRouter)
-  informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter)
+  addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnRouter,Producer.consumer)
+  informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
 
 
   callback(PipeID)
@@ -602,4 +690,7 @@ const createWebRtcTransport = async (router) => {
       reject(error)
     }
   })
+}
+function delay(time) {
+  return new Promise(resolve => setTimeout(resolve, time));
 }

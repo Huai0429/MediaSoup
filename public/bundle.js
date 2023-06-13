@@ -17904,7 +17904,8 @@ const createDevice = async () => {
 const createSendTransport = () => {
   // see server's socket.on('createWebRtcTransport', sender?, ...)
   // this is a call from Producer, so sender = true
-  socket.emit('createWebRtcTransport', { consumer: false ,OnRouter:OnRouter1}, ({ params }) => {
+  let temp = false
+  socket.emit('createWebRtcTransport', { consumer: temp ,OnRouter:OnRouter1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -17949,13 +17950,14 @@ const createSendTransport = () => {
           rtpParameters: parameters.rtpParameters,
           appData: parameters.appData,
           OnRouter: OnRouter1,
+          Dir: temp,
         }, ({ id, producersExist }) => {
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({ id })
 
           console.log('Start to pipe')
-          PipeID = pipetorouter(id,OnRouter1)
+          PipeID = pipetorouter(id,temp,OnRouter1)
           console.log('pipe complete')
           
           
@@ -18009,10 +18011,10 @@ const connectSendTransport = async (OnRouter) => {
 
 }
 
-const pipetorouter = async (id,OnRouter)=>{
+const pipetorouter = async (id,consumer,OnRouter)=>{
   try{
-    console.log('PipeToRouter Dir',OnRouter)
-    await socket.emit('PipeToRouter',{id,OnRouter},(PipeID)=>{
+    console.log('PipeToRouter Dir',consumer,OnRouter)
+    await socket.emit('PipeToRouter',{id,consumer,OnRouter},(PipeID)=>{
       console.log('Pipe ID:',PipeID)
       return PipeID
     })
@@ -18025,8 +18027,8 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
   //check if we are already consuming the remoteProducerId
   if (consumingTransports.includes(remoteProducerId)) return;
   consumingTransports.push(remoteProducerId);
-
-  await socket.emit('createWebRtcTransport', { consumer: true ,OnRouter: OnRouter1}, ({ params }) => {
+  var temp = true
+  await socket.emit('createWebRtcTransport', { consumer: temp ,OnRouter: OnRouter1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -18089,6 +18091,7 @@ const connectRecvTransport = async (consumerTransport, remoteProducerId, serverC
     remoteProducerId,
     serverConsumerTransportId,
     OnRouter: OnRouter1,
+    Dir: temp,
   }, async ({ params }) => {
     if (params.error) {
       console.log('Cannot Consume')

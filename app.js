@@ -141,8 +141,10 @@ connections.on('connection', async socket => {
     // do some cleanup
     console.log('peer disconnected')
     if(peers[socket.id]!==undefined){
-      if(peers[socket.id].OnRouter_P[0]) {R1count--;}
-      else {R2count--;}
+      console.log('disconnect',peers[socket.id].OnRouter_P[0])
+      if(peers[socket.id].OnRouter_P[0]===1) {R1count--;}
+      else if (peers[socket.id].OnRouter_P[0]===2){R2count--;}
+      else if (peers[socket.id].OnRouter_P[0]===3){R3count--;}
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
       pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
@@ -604,34 +606,41 @@ connections.on('connection', async socket => {
   socket.on('PipeToRouter', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
     console.log('PipeToRouter Dir :',Producer.OnRouter,Producer.consumer)
-    let From = Producer.OnRouter?rooms[roomName].router[0]:rooms[roomName].router[1]
-    let To = Producer.OnRouter?rooms[roomName].router[1]:rooms[roomName].router[0]
+    let From = rooms[roomName].router[0]
+    let To1 = rooms[roomName].router[1]
+    let To2 = rooms[roomName].router[2]
     if(Producer.OnRouter===1){
       if(Producer.consumer===false){
         From = rooms[roomName].router[0]
-        To = rooms[roomName].router[1]
+        To1 = rooms[roomName].router[1]
+        To2 = rooms[roomName].router[2]
       }else{
         From = rooms[roomName].router[1]
-        To = rooms[roomName].router[0]
+        To1 = rooms[roomName].router[0]
+        To2 = rooms[roomName].router[2]
       }
     }else if(Producer.OnRouter===2){
       if(Producer.consumer===false){
         From = rooms[roomName].router[1]
-        To = rooms[roomName].router[2]
+        To1 = rooms[roomName].router[0]
+        To2 = rooms[roomName].router[2]
       }else{
         From = rooms[roomName].router[2]
-        To = rooms[roomName].router[1]
+        To1 = rooms[roomName].router[1]
+        To2 = rooms[roomName].router[0]
       }
     }else if(Producer.OnRouter===3){
       if(Producer.consumer===false){
         From = rooms[roomName].router[2]
-        To = rooms[roomName].router[0]
+        To1 = rooms[roomName].router[0]
+        To2 = rooms[roomName].router[1]
       }else{
         From = rooms[roomName].router[0]
-        To = rooms[roomName].router[2]
+        To1 = rooms[roomName].router[2]
+        To2 = rooms[roomName].router[1]
       }
     }
-    console.log('Pipe from ',From.id,' To ',To.id)
+    console.log('Pipe from ',From.id,' To ',To1.id,' & ',To2.id)
     // let producerList = []
     // producers.forEach(producerData => {
     //   if (producerData.socketId !== socket.id && producerData.roomName === roomName) {
@@ -639,18 +648,24 @@ connections.on('connection', async socket => {
     //   }
     // })
     console.log('Pipe which producer',Producer.id)
-    const PipeID = await From.pipeToRouter({
+    const PipeID1 = await From.pipeToRouter({
       producerId:Producer.id,
-      router:To
+      router:To1
+    })
+    console.log('Pipe which producer',Producer.id)
+    const PipeID2 = await From.pipeToRouter({
+      producerId:Producer.id,
+      router:To2
     })
 
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
 
-  addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnRouter,Producer.consumer)
-  informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
+  addPipe(PipeID1.pipeProducer,PipeID1.pipeConsumer, roomName,Producer.OnRouter,Producer.consumer)
+  addPipe(PipeID2.pipeProducer,PipeID2.pipeConsumer, roomName,Producer.OnRouter,Producer.consumer)
+  informConsumers(roomName, socket.id, PipeID1.pipeProducer.id,Producer.OnRouter,Producer.consumer)
 
 
-  callback(PipeID)
+  callback(PipeID1)
   })
 })
 

@@ -20,7 +20,7 @@ let audioProducer
 let videoProducer
 let consumer
 let isProducer = false
-let OnRouter1 = true
+let OnRouter1 = 1
 let PipeID
 
 // https://mediasoup.org/documentation/v3/mediasoup-client/api/#ProducerOptions
@@ -249,7 +249,8 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
   if (consumingTransports.includes(remoteProducerId)) return;
   consumingTransports.push(remoteProducerId);
   var temp = true
-  await socket.emit('createWebRtcTransport', { consumer: temp ,OnRouter: OnRouter1}, ({ params }) => {
+  console.log('signalNewConsumerTransport',OnRouter1)
+  await socket.emit('createWebRtcTransport', { consumer: true ,OnRouter: OnRouter1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -286,7 +287,7 @@ const signalNewConsumerTransport = async (remoteProducerId) => {
       }
     })
 
-    connectRecvTransport(consumerTransport, remoteProducerId, params.id)
+    connectRecvTransport(consumerTransport, remoteProducerId, params.id,true)
   })
 }
 
@@ -303,7 +304,7 @@ const getProducers = async(OnRouter) => {
   })
 }
 
-const connectRecvTransport = async (consumerTransport, remoteProducerId, serverConsumerTransportId) => {
+const connectRecvTransport = async (consumerTransport, remoteProducerId, serverConsumerTransportId,temp) => {
   // for consumer, we need to tell the server first
   // to create a consumer based on the rtpCapabilities and consume
   // if the router can consume, it will send back a set of params as below

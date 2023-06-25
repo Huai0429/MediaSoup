@@ -14,6 +14,7 @@ const __dirname = path.resolve()
 
 import { Server } from 'socket.io'
 import mediasoup from 'mediasoup'
+import {PubSub} from '@google-cloud/pubsub'
 
 app.get('*', (req, res, next) => {
   const path = '/sfu/'
@@ -55,6 +56,49 @@ let peers = {}          // { socketId1: { roomName1, socket, transports = [id1, 
 let transports = []     // [ { socketId1, roomName1, transport, consumer }, ... ]
 let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
+let ProjectID = 'mplus-video-conference-dev'
+let topicName = 'mediasoupv1'
+let subscriptionName = 'mediasoupv1-sub'
+let AnnouncedIP = '35.236.182.41'
+
+async function createTopic(
+  projectId = 'ProjectID', // Your Google Cloud Platform project ID
+  topicName = topicName // Name for the new topic to create
+) {
+  // Instantiates a client
+  const pubsub = new PubSub({ projectId });
+
+  // Creates the new topic
+  const [topic] = await pubsub.createTopic(topicName);
+  console.log(`Topic ${topic.name} created.`);
+}
+
+async function publishMessage(topicName, data,PID) {
+  // [START pubsub_publish]
+  // [START pubsub_quickstart_publisher]
+  // Imports the Google Cloud client library
+
+  // Creates a client
+  const pubsub = new PubSub();
+  /**
+   * TODO(developer): Uncomment the following lines to run the sample.
+   */
+  // const topicName = 'my-topic';
+  // const data = JSON.stringify({ foo: 'bar' });
+
+  // Publishes the message as a string, e.g. "Hello, world!" or JSON.stringify(someObject)
+  const dataBuffer = Buffer.from(data);
+  
+  const customAttributes = {
+    IP: AnnouncedIP
+
+  };
+  const messageId = await pubsub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
+  console.log(`Message ${messageId} published.`);
+
+  // [END pubsub_publish]
+  // [END pubsub_quickstart_publisher]
+}
 
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
@@ -62,6 +106,8 @@ const createWorker = async () => {
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
+  let temp = {PID:worker.pid}
+  publishMessage(topicName, "test",worker.pid);
 
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
@@ -432,7 +478,7 @@ const createWebRtcTransport = async (router) => {
         listenIps: [
           {
             ip: '0.0.0.0', // replace with relevant IP address
-            announcedIp: '35.236.182.41',
+            announcedIp: AnnouncedIP,
           }
         ],
         enableUdp: true,

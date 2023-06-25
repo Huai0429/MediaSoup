@@ -54,7 +54,7 @@ let consumingTransports = [];
 const streamSuccess = (stream) => {
   localVideo.srcObject = stream
 
-  audioParams = { track: stream.getAudioTracks()[0], ...audioParams };
+  // audioParams = { track: stream.getAudioTracks()[0], ...audioParams };
   videoParams = { track: stream.getVideoTracks()[0], ...videoParams };
 
   joinRoom()
@@ -74,7 +74,7 @@ const joinRoom = () => {
 
 const getLocalStream = () => {
   navigator.mediaDevices.getUserMedia({
-    audio: true,
+    audio: false,
     video: {
       width: {
         min: 640,
@@ -189,20 +189,20 @@ const connectSendTransport = async () => {
   // https://mediasoup.org/documentation/v3/mediasoup-client/api/#transport-produce
   // this action will trigger the 'connect' and 'produce' events above
   
-  audioProducer = await producerTransport.produce(audioParams);
+  // audioProducer = await producerTransport.produce(audioParams);
   videoProducer = await producerTransport.produce(videoParams);
 
-  audioProducer.on('trackended', () => {
-    console.log('audio track ended')
+  // audioProducer.on('trackended', () => {
+  //   console.log('audio track ended')
 
-    // close audio track
-  })
+  //   // close audio track
+  // })
 
-  audioProducer.on('transportclose', () => {
-    console.log('audio transport ended')
+  // audioProducer.on('transportclose', () => {
+  //   console.log('audio transport ended')
 
-    // close audio track
-  })
+  //   // close audio track
+  // })
   
   videoProducer.on('trackended', () => {
     console.log('video track ended')

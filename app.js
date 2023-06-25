@@ -116,18 +116,21 @@ connections.on('connection', async socket => {
   socket.on('disconnect', () => {
     // do some cleanup
     console.log('peer disconnected')
-    consumers = removeItems(consumers, socket.id, 'consumer')
-    producers = removeItems(producers, socket.id, 'producer')
-    transports = removeItems(transports, socket.id, 'transport')
-    console.log('disconnect',peers[socket.id])
-    const { roomName } = peers[socket.id]
-    delete peers[socket.id]
+    if(peers[socket.id]!==undefined){
+      consumers = removeItems(consumers, socket.id, 'consumer')
+      producers = removeItems(producers, socket.id, 'producer')
+      transports = removeItems(transports, socket.id, 'transport')
+      console.log('disconnect',peers[socket.id])
+      const { roomName } = peers[socket.id]
+      delete peers[socket.id]
 
-    // remove socket from room
-    rooms[roomName] = {
-      router: rooms[roomName].router,
-      peers: rooms[roomName].peers.filter(socketId => socketId !== socket.id)
+      // remove socket from room
+      rooms[roomName] = {
+        router: rooms[roomName].router,
+        peers: rooms[roomName].peers.filter(socketId => socketId !== socket.id)
+      }
     }
+    
   })
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
@@ -428,8 +431,8 @@ const createWebRtcTransport = async (router) => {
       const webRtcTransport_options = {
         listenIps: [
           {
-            ip: '140.118.107.208', // replace with relevant IP address
-            // announcedIp: '140.118.107.208',
+            ip: '0.0.0.0', // replace with relevant IP address
+            announcedIp: '35.236.182.41',
           }
         ],
         enableUdp: true,

@@ -62,7 +62,7 @@ let subscriptionName = 'mediasoupv1-sub'
 let AnnouncedIP = '35.236.182.41'
 
 async function createTopic(
-  projectId = 'ProjectID', // Your Google Cloud Platform project ID
+  projectId = ProjectID , // Your Google Cloud Platform project ID
   topicName = topicName // Name for the new topic to create
 ) {
   // Instantiates a client
@@ -100,15 +100,52 @@ async function publishMessage(topicName, data,PID) {
   // [END pubsub_quickstart_publisher]
 }
 
+function listenForMessages(subscriptionName, timeout) {
+  // [START pubsub_subscriber_async_pull]
+  // [START pubsub_quickstart_subscriber]
+  // Creates a client
+  const pubsub = new PubSub();
+  /**
+   * TODO(developer): Uncomment the following lines to run the sample.
+   */
+  // const subscriptionName = 'my-sub';
+  // const timeout = 60;
+
+  // References an existing subscription
+  const subscription = pubsub.subscription(subscriptionName);
+
+  // Create an event handler to handle messages
+  let messageCount = 0;
+  const messageHandler = message => {
+    console.log(`Received message ${message.id}:`);
+    console.log(`\tData: ${message.data}`);
+    console.log(`\tAttributes: ${message.attributes},${message.attributes.IP}`);
+    messageCount += 1;
+
+    // "Ack" (acknowledge receipt of) the message
+    message.ack();
+  };
+
+  // Listen for new messages until timeout is hit
+  subscription.on(`message`, messageHandler);
+
+  setTimeout(() => {
+    subscription.removeListener('message', messageHandler);
+    console.log(`${messageCount} message(s) received.`);
+  }, timeout * 1000);
+  // [END pubsub_subscriber_async_pull]
+  // [END pubsub_quickstart_subscriber]
+}
+
+
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
     rtcMinPort: 2000,
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
-  let temp = {PID:worker.pid}
   publishMessage(topicName, "test",worker.pid);
-
+  listenForMessages(subscriptionName, 3);
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')

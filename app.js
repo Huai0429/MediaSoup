@@ -56,10 +56,19 @@ let peers = {}          // { socketId1: { roomName1, socket, transports = [id1, 
 let transports = []     // [ { socketId1, roomName1, transport, consumer }, ... ]
 let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
+let pipeproducers = []
+let pipeconsumers = []
+let incoming = {
+  IP:'',
+  Port:0
+}
 let ProjectID = 'mplus-video-conference-dev'
 let topicName = 'mediasoupv1'
 let subscriptionName = 'mediasoupv1-sub'
 let AnnouncedIP = '35.236.182.41'
+let selector = true
+let VM1_IP = '35.236.182.41'
+let VM2_IP = '35.194.157.28'
 
 async function createTopic(
   projectId = ProjectID , // Your Google Cloud Platform project ID
@@ -73,68 +82,41 @@ async function createTopic(
   console.log(`Topic ${topic.name} created.`);
 }
 
-async function publishMessage(topicName, data,PID) {
-  // [START pubsub_publish]
-  // [START pubsub_quickstart_publisher]
-  // Imports the Google Cloud client library
-
-  // Creates a client
+async function publishMessage(topicName, data, PORT) {
   const pubsub = new PubSub();
-  /**
-   * TODO(developer): Uncomment the following lines to run the sample.
-   */
-  // const topicName = 'my-topic';
-  // const data = JSON.stringify({ foo: 'bar' });
-
-  // Publishes the message as a string, e.g. "Hello, world!" or JSON.stringify(someObject)
   const dataBuffer = Buffer.from(data);
-  
+  PORT = PORT.toString()
   const customAttributes = {
-    IP: AnnouncedIP
-
+    IP: AnnouncedIP,
+    Port: PORT
   };
   const messageId = await pubsub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
-
-  // [END pubsub_publish]
-  // [END pubsub_quickstart_publisher]
 }
 
 function listenForMessages(subscriptionName, timeout) {
-  // [START pubsub_subscriber_async_pull]
-  // [START pubsub_quickstart_subscriber]
-  // Creates a client
   const pubsub = new PubSub();
-  /**
-   * TODO(developer): Uncomment the following lines to run the sample.
-   */
-  // const subscriptionName = 'my-sub';
-  // const timeout = 60;
-
-  // References an existing subscription
   const subscription = pubsub.subscription(subscriptionName);
-
   // Create an event handler to handle messages
   let messageCount = 0;
   const messageHandler = message => {
     console.log(`Received message ${message.id}:`);
     console.log(`\tData: ${message.data}`);
-    console.log(`\tAttributes: ${message.attributes},${message.attributes.IP}`);
+    console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Port}`);
+    incoming.IP = message.attributes.IP
+    incoming.Port = message.attributes.Port
     messageCount += 1;
 
     // "Ack" (acknowledge receipt of) the message
     message.ack();
+    console.log('Message:',incoming.IP,',',incoming.Port)
   };
-
-  // Listen for new messages until timeout is hit
   subscription.on(`message`, messageHandler);
 
   setTimeout(() => {
     subscription.removeListener('message', messageHandler);
     console.log(`${messageCount} message(s) received.`);
   }, timeout * 1000);
-  // [END pubsub_subscriber_async_pull]
-  // [END pubsub_quickstart_subscriber]
 }
 
 
@@ -144,8 +126,6 @@ const createWorker = async () => {
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
-  publishMessage(topicName, "test",worker.pid);
-  listenForMessages(subscriptionName, 3);
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')
@@ -202,8 +182,10 @@ connections.on('connection', async socket => {
     if(peers[socket.id]!==undefined){
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
+      pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
+      pipeconsumers = removeItems(pipeconsumers, socket.id, 'consumer')
       transports = removeItems(transports, socket.id, 'transport')
-      console.log('disconnect',peers[socket.id])
+      // console.log('disconnect',peers[socket.id])
       const { roomName } = peers[socket.id]
       delete peers[socket.id]
 
@@ -217,6 +199,7 @@ connections.on('connection', async socket => {
   })
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
+    console.log('new peers join \'',roomName,'\'')
     // create Router if it does not exist
     // const router1 = rooms[roomName] && rooms[roomName].get('data').router || await createRoom(roomName, socket.id)
     const router1 = await createRoom(roomName, socket.id)
@@ -226,18 +209,26 @@ connections.on('connection', async socket => {
       roomName,           // Name for the Router this Peer joined
       transports: [],
       producers: [],
+      pipeproducers: [],
       consumers: [],
+      pipeconsumers: [],
+      OnVM_P: [],
+      OnVM_C: [],
       peerDetails: {
         name: '',
         isAdmin: false,   // Is this Peer the Admin?
       }
     }
-
+    if(AnnouncedIP === VM1_IP){
+      selector = true
+    }else{
+      selector = false
+    }
     // get Router RTP Capabilities
     const rtpCapabilities = router1.rtpCapabilities
-
+    console.log('joinRoom',selector)
     // call callback from the client and send back the rtpCapabilities
-    callback({ rtpCapabilities })
+    callback({ rtpCapabilities ,selector })
   })
 
   const createRoom = async (roomName, socketId) => {
@@ -287,13 +278,10 @@ connections.on('connection', async socket => {
 
   // Client emits a request to create server side Transport
   // We need to differentiate between the producer and consumer transports
-  socket.on('createWebRtcTransport', async ({ consumer }, callback) => {
-    // get Room Name from Peer's properties
+  socket.on('createWebRtcTransport', async ({ consumer ,OnVM}, callback) => {
     const roomName = peers[socket.id].roomName
-
-    // get Router (Room) object this peer is in based on RoomName
     const router = rooms[roomName].router
-
+    console.log('createWebRtcTransport for consumer',consumer,'on VM :',OnVM?'1':'2')
 
     createWebRtcTransport(router).then(
       transport => {
@@ -307,18 +295,18 @@ connections.on('connection', async socket => {
         })
 
         // add transport to Peer's properties
-        addTransport(transport, roomName, consumer)
+        addTransport(transport, roomName, consumer,OnVM)
       },
       error => {
         console.log(error)
       })
   })
 
-  const addTransport = (transport, roomName, consumer) => {
+  const addTransport = (transport, roomName, consumer, OnVM) => {
 
     transports = [
       ...transports,
-      { socketId: socket.id, transport, roomName, consumer, }
+      { socketId: socket.id, transport, roomName, consumer, OnVM}
     ]
 
     peers[socket.id] = {
@@ -330,10 +318,10 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addProducer = (producer, roomName) => {
+  const addProducer = (producer, roomName, OnVM) => {
     producers = [
       ...producers,
-      { socketId: socket.id, producer, roomName, }
+      { socketId: socket.id, producer, roomName, OnVM}
     ]
 
     peers[socket.id] = {
@@ -341,6 +329,33 @@ connections.on('connection', async socket => {
       producers: [
         ...peers[socket.id].producers,
         producer.id,
+      ],
+      OnVM_P: [
+        ...peers[socket.id].OnVM_P,
+        OnVM,
+      ]
+    }
+  }
+
+  const addPipe = (producer,consumer, roomName,site,Dir) => {
+    pipeproducers = [
+      ...pipeproducers,
+      { socketId: socket.id, producer, roomName, site, Dir}
+    ]
+    pipeconsumers = [
+      ...pipeconsumers,
+      { socketId: socket.id, consumer, roomName, site, Dir}
+    ]
+
+    peers[socket.id] = {
+      ...peers[socket.id],
+      pipeproducers: [
+        ...peers[socket.id].pipeproducers,
+        producer.id,
+      ],
+      pipeconsumers: [
+        ...peers[socket.id].pipeconsumers,
+        consumer.id,
       ]
     }
   }
@@ -403,8 +418,9 @@ connections.on('connection', async socket => {
   })
 
   // see client's socket.emit('transport-produce', ...)
-  socket.on('transport-produce', async ({ kind, rtpParameters, appData }, callback) => {
+  socket.on('transport-produce', async ({ kind, rtpParameters, appData, OnVM}, callback) => {
     // call produce based on the prameters from the client
+    console.log('transport-produce',OnVM)
     const producer = await getTransport(socket.id).produce({
       kind,
       rtpParameters,
@@ -413,9 +429,9 @@ connections.on('connection', async socket => {
     // add producer to the producers array
     const { roomName } = peers[socket.id]
 
-    addProducer(producer, roomName)
+    addProducer(producer, roomName, OnVM)
 
-    informConsumers(roomName, socket.id, producer.id)
+    // informConsumers(roomName, socket.id, producer.id)
 
     console.log('Producer ID: ', producer.id, producer.kind)
 
@@ -504,6 +520,42 @@ connections.on('connection', async socket => {
     console.log('consumer resume')
     const { consumer } = consumers.find(consumerData => consumerData.consumer.id === serverConsumerId)
     await consumer.resume()
+  })
+
+  socket.on('PipeOut', async(Producer,callback) => {
+    const { roomName } = peers[socket.id]
+    const router1 = rooms[roomName].router
+    console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
+    const Pipe1 = await router1.createPipeTransport({
+      listenIp: 
+      {
+        ip: '0.0.0.0', // replace with relevant IP address
+        announcedIp: AnnouncedIP,
+      },
+      enableRtx: true,
+      enableSrtp: true,
+    })
+    // await Pipe1.connect({ip: VM2_IP, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
+    console.log('Message Out: ',AnnouncedIP,Pipe1.tuple.localPort)
+    publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort);
+    
+
+    console.log('Pipe which producer',Producer.id)
+    // const PipeID = await From.pipeToRouter({
+    //   producerId:Producer.id,
+    //   router:To1
+    // })
+
+
+//  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
+
+    // addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnVM,Producer.consumer)
+    // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
+    listenForMessages(subscriptionName, 3);
+
+    informConsumers(roomName, socket.id, Producer.id)
+
+    callback(Pipe1)
   })
 })
 

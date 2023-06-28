@@ -19,6 +19,7 @@ let audioProducer
 let videoProducer
 let consumer
 let isProducer = false
+let OnVM1 = true
 
 // https://mediasoup.org/documentation/v3/mediasoup-client/api/#ProducerOptions
 // https://mediasoup.org/documentation/v3/mediasoup-client/api/#transport-produce
@@ -66,7 +67,8 @@ const joinRoom = () => {
     // we assign to local variable and will be used when
     // loading the client Device (see createDevice above)
     rtpCapabilities = data.rtpCapabilities
-
+    OnVM1 = data.selector
+    
     // once we have rtpCapabilities from the Router, create Device
     createDevice()
   })
@@ -120,7 +122,7 @@ const createDevice = async () => {
 const createSendTransport = () => {
   // see server's socket.on('createWebRtcTransport', sender?, ...)
   // this is a call from Producer, so sender = true
-  socket.emit('createWebRtcTransport', { consumer: false }, ({ params }) => {
+  socket.emit('createWebRtcTransport', { consumer: false , OnVM: OnVM1}, ({ params }) => {
     // The server sends back params needed 
     // to create Send Transport on the client side
     if (params.error) {
@@ -166,11 +168,12 @@ const createSendTransport = () => {
           kind: parameters.kind,
           rtpParameters: parameters.rtpParameters,
           appData: parameters.appData,
+          OnVM: OnVM1
         }, ({ id, producersExist }) => {
           // Tell the transport that parameters were transmitted and provide it with the
           // server side producer's id.
           callback({ id })
-
+          PipeOut(id,false,OnVM1)
           // if producers exist, then join room
           if (producersExist) getProducers()
         })
@@ -216,7 +219,17 @@ const connectSendTransport = async () => {
     // close video track
   })
 }
-
+const PipeOut = async (id,consumer,OnVM)=>{
+  try{
+    console.log('Pipe Out Dir',consumer,OnVM)
+    await socket.emit('PipeOut',{id,consumer,OnVM},(PipeID)=>{
+      console.log('Pipe ID:',PipeID)
+      return PipeID
+    })
+  }catch(error){
+    console.log('Pipe Out error',error)
+  }
+}
 const signalNewConsumerTransport = async (remoteProducerId) => {
   //check if we are already consuming the remoteProducerId
   if (consumingTransports.includes(remoteProducerId)) return;

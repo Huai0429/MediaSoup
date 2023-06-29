@@ -126,6 +126,7 @@ const createWorker = async () => {
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
+  listenForMessages(subscriptionName, 3);
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')
@@ -551,7 +552,7 @@ connections.on('connection', async socket => {
 
     // addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnVM,Producer.consumer)
     // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
-    listenForMessages(subscriptionName, 3);
+    
 
     informConsumers(roomName, socket.id, Producer.id)
 

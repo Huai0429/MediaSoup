@@ -64,7 +64,7 @@ let incoming = {
 }
 let ProjectID = 'mplus-video-conference-dev'
 let topicName = 'mediasoupv1'
-let subscriptionName = 'mediasoupv1-sub'
+let subscriptionName = 'mediasoupv2-sub'
 let AnnouncedIP = '35.236.182.41'
 let selector = true
 let VM1_IP = '35.236.182.41'
@@ -113,10 +113,10 @@ function listenForMessages(subscriptionName, timeout) {
   };
   subscription.on(`message`, messageHandler);
 
-  setTimeout(() => {
-    subscription.removeListener('message', messageHandler);
-    console.log(`${messageCount} message(s) received.`);
-  }, timeout * 1000);
+  // setTimeout(() => {
+  //   subscription.removeListener('message', messageHandler);
+  //   console.log(`${messageCount} message(s) received.`);
+  // }, timeout * 1000);
 }
 
 

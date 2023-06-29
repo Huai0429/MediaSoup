@@ -59,8 +59,8 @@ let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
 let pipeproducers = []
 let pipeconsumers = []
 let incoming = {
-  IP:'',
-  Port:0
+  IP:[],
+  Port:[]
 }
 let ProjectID = 'mplus-video-conference-dev'
 let topicName = 'mediasoupv1'
@@ -82,14 +82,17 @@ async function createTopic(
   console.log(`Topic ${topic.name} created.`);
 }
 
-async function publishMessage(topicName, data, PORT) {
+async function publishMessage(topicName, data, PORT,add) {
   const pubsub = new PubSub();
   const dataBuffer = Buffer.from(data);
+  add = add.toString()
   PORT = PORT.toString()
   const customAttributes = {
+    Add: add,
     IP: AnnouncedIP,
     Port: PORT
   };
+  console.log('Message Out: ',customAttributes.Add,customAttributes.IP,customAttributes.Port)
   const messageId = await pubsub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
@@ -102,9 +105,17 @@ function listenForMessages(subscriptionName, timeout) {
   const messageHandler = message => {
     console.log(`Received message ${message.id}:`);
     console.log(`\tData: ${message.data}`);
-    console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Port}`);
-    incoming.IP = message.attributes.IP
-    incoming.Port = message.attributes.Port
+    console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
+    if(message.attributes.Add==='true'){
+      incoming.IP.push(message.attributes.IP)
+      incoming.Port.push(message.attributes.Port)
+    }else{
+      let index = incoming.IP.indexOf(message.attributes.IP);
+      incoming.IP.splice(index, 1);
+      index = incoming.Port.indexOf(message.attributes.Port);
+      incoming.Port.splice(index, 1);
+    }
+    
     messageCount += 1;
 
     // "Ack" (acknowledge receipt of) the message
@@ -181,6 +192,12 @@ connections.on('connection', async socket => {
     // do some cleanup
     console.log('peer disconnected')
     if(peers[socket.id]!==undefined){
+      if(peers[socket.id]!==undefined){
+        pipeproducers.forEach(item => {
+          if (item.socketId === socket.id) 
+            publishMessage(topicName, "IP & Port",item.Port,false);
+        })
+      }
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
       pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
@@ -338,14 +355,14 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addPipe = (producer,consumer, roomName,site,Dir) => {
+  const addPipe = (producer,consumer, roomName,site,Dir,Port) => {
     pipeproducers = [
       ...pipeproducers,
-      { socketId: socket.id, producer, roomName, site, Dir}
+      { socketId: socket.id, producer, roomName, site, Dir,Port}
     ]
     pipeconsumers = [
       ...pipeconsumers,
-      { socketId: socket.id, consumer, roomName, site, Dir}
+      { socketId: socket.id, consumer, roomName, site, Dir,Port}
     ]
 
     peers[socket.id] = {
@@ -537,8 +554,8 @@ connections.on('connection', async socket => {
       enableSrtp: true,
     })
     // await Pipe1.connect({ip: VM2_IP, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
-    console.log('Message Out: ',AnnouncedIP,Pipe1.tuple.localPort)
-    publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort);
+    
+    publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,true);
     
 
     console.log('Pipe which producer',Producer.id)
@@ -550,7 +567,7 @@ connections.on('connection', async socket => {
 
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
 
-    // addPipe(PipeID.pipeProducer,PipeID.pipeConsumer, roomName,Producer.OnVM,Producer.consumer)
+    addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
     // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
     
 

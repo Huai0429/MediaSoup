@@ -69,7 +69,9 @@ let AnnouncedIP = '35.236.182.41'
 let selector = true
 let VM1_IP = '35.236.182.41'
 let VM2_IP = '35.194.157.28'
-
+const pub = new PubSub();
+const sub = new PubSub();
+const subscription = sub.subscription(subscriptionName);
 async function createTopic(
   projectId = ProjectID , // Your Google Cloud Platform project ID
   topicName = topicName // Name for the new topic to create
@@ -83,7 +85,7 @@ async function createTopic(
 }
 
 async function publishMessage(topicName, data, PORT,add) {
-  const pubsub = new PubSub();
+  
   const dataBuffer = Buffer.from(data);
   add = add.toString()
   PORT = PORT.toString()
@@ -93,42 +95,63 @@ async function publishMessage(topicName, data, PORT,add) {
     Port: PORT
   };
   console.log('Message Out: ',customAttributes.Add,customAttributes.IP,customAttributes.Port)
-  const messageId = await pubsub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
+  const messageId = await pub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
 
 function listenForMessages(subscriptionName, timeout) {
-  const pubsub = new PubSub();
-  const subscription = pubsub.subscription(subscriptionName);
+  // const pubsub = new PubSub();
+  const subscription = sub.subscription(subscriptionName);
   // Create an event handler to handle messages
   let messageCount = 0;
-  const messageHandler = message => {
-    console.log(`Received message ${message.id}:`);
-    console.log(`\tData: ${message.data}`);
-    console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
-    if(message.attributes.Add==='true'){
-      incoming.IP.push(message.attributes.IP)
-      incoming.Port.push(message.attributes.Port)
-    }else{
-      let index = incoming.IP.indexOf(message.attributes.IP);
-      incoming.IP.splice(index, 1);
-      index = incoming.Port.indexOf(message.attributes.Port);
-      incoming.Port.splice(index, 1);
-    }
+  // const messageHandler = message => {
+  //   console.log(`Received message ${message.id}:`);
+  //   console.log(`\tData: ${message.data}`);
+  //   console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
+  //   if(message.attributes.Add==='true'){
+  //     incoming.IP.push(message.attributes.IP)
+  //     incoming.Port.push(message.attributes.Port)
+  //   }else{
+  //     let index = incoming.IP.indexOf(message.attributes.IP);
+  //     incoming.IP.splice(index, 1);
+  //     index = incoming.Port.indexOf(message.attributes.Port);
+  //     incoming.Port.splice(index, 1);
+  //   }
     
-    messageCount += 1;
+  //   messageCount += 1;
 
-    // "Ack" (acknowledge receipt of) the message
-    message.ack();
-    console.log('Message:',incoming.IP,',',incoming.Port)
-  };
-  subscription.on(`message`, messageHandler);
+  //   // "Ack" (acknowledge receipt of) the message
+  //   message.ack();
+  //   console.log('Message:',incoming.IP,',',incoming.Port)
+  // };
+  // subscription.on(`message`, messageHandler);
 
   // setTimeout(() => {
   //   subscription.removeListener('message', messageHandler);
   //   console.log(`${messageCount} message(s) received.`);
   // }, timeout * 1000);
 }
+
+const messageHandler = message => {
+  console.log(`Received message ${message.id}:${pipe}`);
+  console.log(`\tData: ${message.data}`);
+  console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
+  if(message.attributes.Add==='true'){
+    incoming.IP.push(message.attributes.IP)
+    incoming.Port.push(message.attributes.Port)
+  }else{
+    let index = incoming.IP.indexOf(message.attributes.IP);
+    incoming.IP.splice(index, 1);
+    index = incoming.Port.indexOf(message.attributes.Port);
+    incoming.Port.splice(index, 1);
+  }
+  
+  // messageCount += 1;
+
+  // "Ack" (acknowledge receipt of) the message
+  message.ack();
+  console.log('Message:',incoming.IP,',',incoming.Port)
+};
 
 
 const createWorker = async () => {
@@ -137,7 +160,7 @@ const createWorker = async () => {
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
-  listenForMessages(subscriptionName, 3);
+  // listenForMessages(subscriptionName, 3);
   worker.on('died', error => {
     // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')
@@ -551,11 +574,30 @@ connections.on('connection', async socket => {
         announcedIp: AnnouncedIP,
       },
       enableRtx: true,
-      enableSrtp: true,
+      // enableSrtp: true,
     })
-    // await Pipe1.connect({ip: VM2_IP, port: pipe2.tuple.localPort, srtpParameters: pipe2.srtpParameters});
-    
     publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,true);
+    subscription.on(`message`, async(message) => {
+      message.ack();
+      console.log('message in:',message.attributes.Add,message.attributes.IP,message.attributes.Port)
+      const port = parseInt(message.attributes.Port)
+      if(message.attributes.Add==='true'){
+        incoming.IP.push(message.attributes.IP)
+        incoming.Port.push(message.attributes.Port)
+        await Pipe1.connect({ip: message.attributes.IP, port: port});
+      }else{
+        let index = incoming.IP.indexOf(message.attributes.IP);
+        incoming.IP.splice(index, 1);
+        index = incoming.Port.indexOf(message.attributes.Port);
+        incoming.Port.splice(index, 1);
+      }
+      console.log('Message:',incoming.IP,',',incoming.Port)
+    })
+    
+    // console.log(incoming.IP.slice(-1)[0],incoming.Port.slice(-1)[0])
+    // await Pipe1.connect({ip: incoming.IP.slice(-1)[0], port: incoming.Port.slice(-1)[0]});
+    
+    
     
 
     console.log('Pipe which producer',Producer.id)

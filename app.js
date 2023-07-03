@@ -6,7 +6,7 @@
 /* https://mediasoup.org/documentation/v3/mediasoup/installation/ */
 import express from 'express'
 const app = express()
-
+import redis from 'redis'
 import https from 'httpolyglot'
 import fs from 'fs'
 import path from 'path'
@@ -72,6 +72,17 @@ let VM2_IP = '35.194.157.28'
 const pub = new PubSub();
 const sub = new PubSub();
 const subscription = sub.subscription(subscriptionName);
+
+const redisCli = redis.createClient('6379',VM2_IP);
+redisCli.on('error',function(error){
+  console.error('redis client error',error);
+})
+redisCli.on('connect', function () {
+  console.log('connected to redis : ' + VM2_IP)
+  //Now we have redisClient ready. It needs to subscribe to a channel where we exchange piping messages
+  redisCli.subscribe('REQUESTFORPIPING')
+})
+
 async function createTopic(
   projectId = ProjectID , // Your Google Cloud Platform project ID
   topicName = topicName // Name for the new topic to create
@@ -566,33 +577,73 @@ connections.on('connection', async socket => {
   socket.on('PipeOut', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
     const router1 = rooms[roomName].router
+    let Pipe1
     console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
-    const Pipe1 = await router1.createPipeTransport({
-      listenIp: 
-      {
-        ip: '0.0.0.0', // replace with relevant IP address
-        announcedIp: AnnouncedIP,
-      },
-      enableRtx: true,
-      // enableSrtp: true,
-    })
-    publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,true);
-    subscription.on(`message`, async(message) => {
-      message.ack();
-      console.log('message in:',message.attributes.Add,message.attributes.IP,message.attributes.Port)
-      const port = parseInt(message.attributes.Port)
-      if(message.attributes.Add==='true'){
-        incoming.IP.push(message.attributes.IP)
-        incoming.Port.push(message.attributes.Port)
-        await Pipe1.connect({ip: message.attributes.IP, port: port});
-      }else{
-        let index = incoming.IP.indexOf(message.attributes.IP);
-        incoming.IP.splice(index, 1);
-        index = incoming.Port.indexOf(message.attributes.Port);
-        incoming.Port.splice(index, 1);
+    redisCli.on('message',async function(channel,msg){
+      const message = JSON.parse(msg)
+      if (channel === 'REQUESTFORPIPING' && message.signature !== AnnouncedIP) {
+        if (message.type === 'CREATE_PIPE') {
+          console.log('Incoming message CREATE_PIPE',message)
+          Pipe1 = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+          addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
+          redisCli.publish('REQUESTFORPIPING', JSON.stringify({
+            type: 'CREATE_PIPE',
+            signature: AnnouncedIP,
+            roomId: roomName,
+            requestedIp: message.signature
+          }))
+        }
+        if (message.type === 'CONNECT_PIPE') {
+          console.log('Incoming message CONNECT_PIPE',message)
+          await Pipe1.connect({
+              ip: message.remoteIp,
+              port: message.remotePort,
+              srtpParameters: message.srtpParameters
+          })
+          redisCli.publish('REQUESTFORPIPING', JSON.stringify({
+              type: 'CONNECT_PIPE',
+              remoteIp: Pipe1.tuple.localIp,
+              remotePort: Pipe1.tuple.localPort,
+              srtpParameters: Pipe1.srtpParameters,
+              signature: AnnouncedIP,
+              roomId: roomName,
+              requestedIp: message.signature
+          }))
+        }
       }
-      console.log('Message:',incoming.IP,',',incoming.Port)
     })
+    // publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,true);
+    // subscription.on(`message`, async(message) => {
+    //   let messageCount = 0;
+    //   message.ack();
+    //   console.log('message in:',message.attributes.Add,message.attributes.IP,message.attributes.Port)
+    //   const port = parseInt(message.attributes.Port)
+    //   if(message.attributes.Add==='true'){
+    //     incoming.IP.push(message.attributes.IP)
+    //     incoming.Port.push(message.attributes.Port)
+    //     await Pipe1.connect({ip: message.attributes.IP, port: port});
+    //     console.log('connect successful')
+    //   }else{
+    //     let index = incoming.IP.indexOf(message.attributes.IP);
+    //     incoming.IP.splice(index, 1);
+    //     index = incoming.Port.indexOf(message.attributes.Port);
+    //     incoming.Port.splice(index, 1);
+    //   }
+    //   messageCount+=1
+    //   console.log('Message:',incoming.IP,',',incoming.Port)
+    //   setTimeout(() => {
+    //     subscription.removeListener('message', messageHandler);
+    //     console.log(`${messageCount} message(s) received.`);
+    //   }, 1 * 1000);
+    // })
     
     // console.log(incoming.IP.slice(-1)[0],incoming.Port.slice(-1)[0])
     // await Pipe1.connect({ip: incoming.IP.slice(-1)[0], port: incoming.Port.slice(-1)[0]});
@@ -609,7 +660,6 @@ connections.on('connection', async socket => {
 
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
 
-    addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
     // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
     
 

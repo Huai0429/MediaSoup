@@ -13,11 +13,12 @@
   "type": "module",
   "dependencies": {
     "@google-cloud/pubsub": "^3.7.1",
-    "grpc": "^1.24.11",
     "express": "^4.18.2",
+    "grpc": "^1.24.11",
     "httpolyglot": "^0.1.2",
     "mediasoup": "^3.11.13",
     "mediasoup-client": "^3.6.82",
+    "redis": "^4.6.7",
     "socket.io": "^4.6.1",
     "socket.io-client": "^4.6.1"
   },

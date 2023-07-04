@@ -104,18 +104,17 @@ async function createTopic(
   console.log(`Topic ${topic.name} created.`);
 }
 
-async function publishMessage(topicName, data, PORT,add,event) {
+async function publishMessage(topicName, data, PORT,event) {
   
   const dataBuffer = Buffer.from(data);
   add = add.toString()
   PORT = PORT.toString()
   const customAttributes = {
     Event:event,
-    Add: add,
     IP: AnnouncedIP,
     Port: PORT
   };
-  console.log('Message Out: ',customAttributes.Add,customAttributes.IP,customAttributes.Port,customAttributes.Event)
+  console.log('Message Out: ',customAttributes.Event,customAttributes.IP,customAttributes.Port)
   const messageId = await pub.topic(topicName).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
@@ -156,16 +155,16 @@ function listenForMessages(subscriptionName, timeout) {
 const messageHandler = message => {
   console.log(`Received message ${message.id}:${pipe}`);
   console.log(`\tData: ${message.data}`);
-  console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
-  if(message.attributes.Add==='true'){
-    incoming.IP.push(message.attributes.IP)
-    incoming.Port.push(message.attributes.Port)
-  }else{
-    let index = incoming.IP.indexOf(message.attributes.IP);
-    incoming.IP.splice(index, 1);
-    index = incoming.Port.indexOf(message.attributes.Port);
-    incoming.Port.splice(index, 1);
-  }
+  console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Port}`);
+  // if(message.attributes.Add==='true'){
+  //   incoming.IP.push(message.attributes.IP)
+  //   incoming.Port.push(message.attributes.Port)
+  // }else{
+  //   let index = incoming.IP.indexOf(message.attributes.IP);
+  //   incoming.IP.splice(index, 1);
+  //   index = incoming.Port.indexOf(message.attributes.Port);
+  //   incoming.Port.splice(index, 1);
+  // }
   
   // messageCount += 1;
 
@@ -239,7 +238,7 @@ connections.on('connection', async socket => {
       if(peers[socket.id]!==undefined){
         pipeproducers.forEach(item => {
           if (item.socketId === socket.id) 
-            publishMessage(topicName, "IP & Port",item.Port,false);
+            publishMessage(topicName, "IP & Port",item.Port,'DISCONNECT_PIPE');
         })
       }
       consumers = removeItems(consumers, socket.id, 'consumer')
@@ -631,12 +630,12 @@ connections.on('connection', async socket => {
     //     }
     //   }
     // })
-    publishMessage(topicName, "Create pipe transport",0,true,'CREATE_PIPE');
+    publishMessage(topicName, "Create pipe transport",0,'CREATE_PIPE');
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
       message.ack();
-      console.log('message in:',msg.Event,msg.Add,msg.IP,msg.Port)
+      console.log('message in:',msg.Event,msg.IP,msg.Port)
       const port = parseInt(msg.Port)
       if(msg.Event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         Pipe1 = await router1.createPipeTransport({
@@ -648,31 +647,30 @@ connections.on('connection', async socket => {
           enableRtx: true,
           // enableSrtp: true,
         })
-        addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
-        publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,true,'CONNECT_PIPE');
+        publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,'CONNECT_PIPE');
       }
       if(msg.Event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
-        if(msg.Add==='true'){
-          incoming.IP.push(msg.IP)
-          incoming.Port.push(msg.Port)
-          await Pipe1.connect({ip: msg.IP, port: port});
-          console.log('connect successful')
-        }else{
-          let index = incoming.IP.indexOf(msg.IP);
-          incoming.IP.splice(index, 1);
-          index = incoming.Port.indexOf(msg.Port);
-          incoming.Port.splice(index, 1);
-        }
+        incoming.IP.push(msg.IP)
+        incoming.Port.push(msg.Port)
+        delay(1000)
+        await Pipe1.connect({ip: msg.IP, port: port});
+        console.log('connect successful')
+        addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
+      }
+      if(msg.Event==='DISCONNECT_PIPE'&&msg.IP!==AnnouncedIP){
+        let index = incoming.IP.indexOf(msg.IP);
+        incoming.IP.splice(index, 1);
+        index = incoming.Port.indexOf(msg.Port);
+        incoming.Port.splice(index, 1);
       }
       
       messageCount+=1
       console.log('Message:',incoming.IP,',',incoming.Port)
       setTimeout(() => {
-        // subscription.removeListener('message', messageHandler);
+        subscription.removeListener('message', messageHandler);
         console.log(`${messageCount} message(s) received.`);
       }, 1 * 1000);
     })
-    
     // console.log(incoming.IP.slice(-1)[0],incoming.Port.slice(-1)[0])
     // await Pipe1.connect({ip: incoming.IP.slice(-1)[0], port: incoming.Port.slice(-1)[0]});
     
@@ -688,7 +686,6 @@ connections.on('connection', async socket => {
 
 //  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
     // addPipe('PipeID.pipeProducer','PipeID.pipeConsumer', roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
-    addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
 
     // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
     
@@ -735,4 +732,7 @@ const createWebRtcTransport = async (router) => {
       reject(error)
     }
   })
+}
+function delay(time) {
+  return new Promise(resolve => setTimeout(resolve, time));
 }

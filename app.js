@@ -107,7 +107,6 @@ async function createTopic(
 async function publishMessage(topicName, data, PORT,event) {
   
   const dataBuffer = Buffer.from(data);
-  add = add.toString()
   PORT = PORT.toString()
   const customAttributes = {
     Event:event,

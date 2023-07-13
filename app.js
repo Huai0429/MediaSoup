@@ -674,8 +674,7 @@ connections.on('connection', async socket => {
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
-      console.log('message in:',msg.Event,msg.IP,msg.Port)
-      const port = parseInt(msg.Port)
+      console.log('message in:',msg.event,msg.IP,msg.PORT)
       if(msg.Event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
         console.log('Creating Pipe')
@@ -705,14 +704,15 @@ connections.on('connection', async socket => {
       }
       if(msg.Event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
+        const port = parseInt(msg.PORT)
         console.log('Connecting Pipe',Pipe1)
         incoming.IP.push(msg.IP)
-        incoming.Port.push(msg.Port)
+        incoming.Port.push(msg.PORT)
         if(Pipe1===undefined)
           await delay(1000)
-        await Pipe1.connect({ip: msg.IP, port: msg.PORT,srtpParameters:msg.SRTP});
+        await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:msg.SRTP});
         console.log('connect successful',Pipe1)
-        addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
+        addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,msg.PORT)
         publishMessage({
           Topic:topicName, 
           data:"Consume",

@@ -710,7 +710,7 @@ connections.on('connection', async socket => {
         incoming.Port.push(msg.Port)
         if(Pipe1===undefined)
           await delay(1000)
-        await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.Srtp_Suite,keyBase64:msg.Srtp_keyBase}});
+        await Pipe1.connect({ip: msg.IP, port: msg.PORT,srtpParameters:msg.SRTP});
         console.log('connect successful',Pipe1)
         addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
         publishMessage({

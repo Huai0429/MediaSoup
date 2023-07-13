@@ -627,7 +627,8 @@ connections.on('connection', async socket => {
   socket.on('PipeOut', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
     const router1 = rooms[roomName].router
-    let Pipe1
+    let Pipe1,Pipe2
+    let pipeconsumer,pipeproducer
     console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
     // redisCli.on('message',async function(channel,msg){
     //   console.log('redis message in',channel)
@@ -675,7 +676,7 @@ connections.on('connection', async socket => {
       let msg = message.attributes
       let messageCount = 0;
       console.log('message in:',msg.event,msg.IP,msg.PORT)
-      if(msg.Event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
         console.log('Creating Pipe')
         Pipe1 = await router1.createPipeTransport({
@@ -697,46 +698,72 @@ connections.on('connection', async socket => {
           IP: AnnouncedIP,
           PORT:Pipe1.tuple.localPort.toString(),
           event:'CONNECT_PIPE',
-          SRTP : {cryptoSuite:Pipe1.srtpParameters.cryptoSuite,
-                  keyBase64:Pipe1.srtpParameters.keyBase64},
+          SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
+          SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
           producerId:'undefined'
           });
       }
-      if(msg.Event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
         const port = parseInt(msg.PORT)
-        console.log('Connecting Pipe',Pipe1)
+        console.log('Connecting Pipe')
         incoming.IP.push(msg.IP)
         incoming.Port.push(msg.PORT)
         if(Pipe1===undefined)
           await delay(1000)
-        await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:msg.SRTP});
-        console.log('connect successful',Pipe1)
+        await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
+        console.log('connect successful',Producer.id)
         addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,msg.PORT)
         publishMessage({
           Topic:topicName, 
-          data:"Consume",
+          data:"can Produce",
           IP: AnnouncedIP,
-          PORT:'Consume',
-          event:'canConsume',
+          PORT:'Produce',
+          event:'canProduce',
           SRTP : 'undefined',
           producerId:Producer.id
           });
         // publishMessage(topicName, "Consume",Pipe1.tuple.localPort,'canConsume',producerId= Producer.id);
       }
-      if(msg.Event==='canConsume'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='canConsume'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Can Consume',Pipe1);
-        Pipe1.consume();
+        console.log('Can Consume event!!!!',JSON.parse(msg.data));
+        pipeconsumer = Pipe1.consume({producerId:Producer.id});
       }
-      if(msg.Event==='canProduce'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='canProduce'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Disconnecting Pipe',Pipe1);
-        Pipe1.produce();
+        console.log('canProduce Event!!!!',JSON.parse(msg.data));
+        // pipeproducer = Pipe1.produce();
       }
-      if(msg.Event==='DISCONNECT_PIPE'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='canProduce'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Disconnecting Pipe',Pipe1)
+        const rtpCapabilities = router1.rtpCapabilities
+        console.log('canProduce Event');
+        try {
+            pipeconsumer = await Pipe1.consume({
+                producerId: Producer.id,
+                rtpCapabilities,
+                kind: 'video',
+                paused: false
+            })
+        } catch (error) {
+            console.error('video consume failed', error)
+            return
+        }
+        console.log(pipeconsumer.rtpParameters)
+        publishMessage({
+          Topic:topicName, 
+          data:JSON.stringify(pipeconsumer.rtpParameters),
+          IP: AnnouncedIP,
+          PORT:'Produce',
+          event:'canConsume',
+          SRTP : 'undefined',
+          producerId:Producer.id
+          });
+      }
+      if(msg.event==='DISCONNECT_PIPE'&&msg.IP!==AnnouncedIP){
+        message.ack();
+        console.log('Disconnecting Pipe',Producer.id)
         let index = incoming.IP.indexOf(msg.IP);
         incoming.IP.splice(index, 1);
         index = incoming.Port.indexOf(msg.Port);

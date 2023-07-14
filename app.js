@@ -728,12 +728,7 @@ connections.on('connection', async socket => {
       if(msg.event==='canConsume'&&msg.IP!==AnnouncedIP){
         message.ack();
         console.log('Can Consume event!!!!',JSON.parse(msg.data));
-        pipeconsumer = Pipe1.consume({producerId:Producer.id});
-      }
-      if(msg.event==='canProduce'&&msg.IP!==AnnouncedIP){
-        message.ack();
-        console.log('canProduce Event!!!!',JSON.parse(msg.data));
-        // pipeproducer = Pipe1.produce();
+        // pipeconsumer = Pipe1.consume({producerId:Producer.id});
       }
       if(msg.event==='canProduce'&&msg.IP!==AnnouncedIP){
         message.ack();

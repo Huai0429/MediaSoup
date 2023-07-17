@@ -72,7 +72,10 @@ let VM2_IP = '35.194.157.28'
 let redis_ip = '35.194.211.137'
 const pub = new PubSub();
 const sub = new PubSub();
-const subscription = sub.subscription(subscriptionName);
+const flowControl = {
+  maxExtensionMinutes: 0,
+}
+const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
 
 const redisCli = redis.createClient('6379',redis_ip);
 (async () => {
@@ -705,6 +708,17 @@ connections.on('connection', async socket => {
       }
       if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
+        if(Pipe1===undefined){
+          Pipe1 = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+        }
         const port = parseInt(msg.PORT)
         console.log('Connecting Pipe')
         incoming.IP.push(msg.IP)
@@ -745,7 +759,7 @@ connections.on('connection', async socket => {
             console.error('video consume failed', error)
             return
         }
-        console.log(pipeconsumer.rtpParameters)
+        // console.log(pipeconsumer.rtpParameters)
         publishMessage({
           Topic:topicName, 
           data:JSON.stringify(pipeconsumer.rtpParameters),

@@ -114,7 +114,7 @@ async function publishMessage(customAttributes) {
   //   data:"Consume",
   //   IP: AnnouncedIP,
   //   PORT:'Consume',
-  //   event:'canConsume',
+  //   event:'PIPE_CONSUME',
   //   SRTP : 'undefined',
   //   producerId:Producer.id
   //   });
@@ -295,15 +295,17 @@ connections.on('connection', async socket => {
 
   socket.on('joinRoom', async ({ roomName }, callback) => {
     console.log('new peers join \'',roomName,'\'')
-    publishMessage({
-      Topic:topicName, 
-      data:"Create pipe transport",
-      IP: AnnouncedIP,
-      PORT:'1',
-      event:'CREATE_PIPE',
-      SRTP : 'undefined',
-      producerId:'undefined'
-      });
+    //main
+    // publishMessage({
+    //   Topic:topicName, 
+    //   data:"Create pipe transport",
+    //   IP: AnnouncedIP,
+    //   PORT:'1',
+    //   event:'CREATE_PIPE',
+    //   SRTP : 'undefined',
+    //   producerId:'undefined'
+    //   });
+
     // publishMessage(topicName, "Create pipe transport",1,'CREATE_PIPE');
     // create Router if it does not exist
     // const router1 = rooms[roomName] && rooms[roomName].get('data').router || await createRoom(roomName, socket.id)
@@ -452,16 +454,23 @@ connections.on('connection', async socket => {
       { socketId: socket.id, consumer, roomName, site, Dir,Port}
     ]
 
-    peers[socket.id] = {
-      ...peers[socket.id],
-      pipeproducers: [
-        ...peers[socket.id].pipeproducers,
-        producer.id,
-      ],
-      pipeconsumers: [
-        ...peers[socket.id].pipeconsumers,
-        consumer.id,
-      ]
+    if(producer===undefined){
+      peers[socket.id] = {
+        ...peers[socket.id],
+        pipeconsumers: [
+          ...peers[socket.id].pipeconsumers,
+          consumer.id,
+        ]
+      }
+    }
+    if(consumer===undefined){
+      peers[socket.id] = {
+        ...peers[socket.id],
+        pipeproducers: [
+          ...peers[socket.id].pipeproducers,
+          producer.id,
+        ],
+      }
     }
   }
 
@@ -497,17 +506,28 @@ connections.on('connection', async socket => {
     callback(producerList)
   })
 
-  const informConsumers = (roomName, socketId, id) => {
+  const informConsumers = (roomName, socketId, id, PipeorNot) => {
     console.log(`just joined, id ${id} ${roomName}, ${socketId}`)
     // A new producer just joined
     // let all consumers to consume this producer
-    producers.forEach(producerData => {
-      if (producerData.socketId !== socketId && producerData.roomName === roomName) {
-        const producerSocket = peers[producerData.socketId].socket
-        // use socket to send producer id to producer
-        producerSocket.emit('new-producer', { producerId: id })
-      }
-    })
+    if(PipeorNot===true){
+      pipeproducers.forEach(producerData => {
+        if (producerData.socketId !== socketId && producerData.roomName === roomName) {
+          const producerSocket = peers[producerData.socketId].socket
+          // use socket to send producer id to producer
+          producerSocket.emit('new-producer', { producerId: id })
+        }
+      })
+    }else{
+      producers.forEach(producerData => {
+        if (producerData.socketId !== socketId && producerData.roomName === roomName) {
+          const producerSocket = peers[producerData.socketId].socket
+          // use socket to send producer id to producer
+          producerSocket.emit('new-producer', { producerId: id })
+        }
+      })
+    }
+    
   }
 
   const getTransport = (socketId) => {
@@ -571,7 +591,7 @@ connections.on('connection', async socket => {
       )).transport
 
       // check if the router can consume the specified producer
-      if (router.canConsume({
+      if (router.PIPE_CONSUME({
         producerId: remoteProducerId,
         rtpCapabilities
       })) {
@@ -693,18 +713,26 @@ connections.on('connection', async socket => {
         })
         await delay(1000)
         // console.log('Pipe1',Pipe1.srtpParameters)
-        // publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,'CONNECT_PIPE',Pipe1.srtpParameters);
-
         publishMessage({
           Topic:topicName, 
-          data:"Connect Pipe",
+          data:"Create pipe transport",
           IP: AnnouncedIP,
-          PORT:Pipe1.tuple.localPort.toString(),
-          event:'CONNECT_PIPE',
-          SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
-          SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
+          PORT:'1',
+          event:'CREATE_PIPE',
+          SRTP : 'undefined',
           producerId:'undefined'
-          });
+        });
+        
+        // publishMessage({
+        //   Topic:topicName, 
+        //   data:"Connect Pipe",
+        //   IP: AnnouncedIP,
+        //   PORT:Pipe1.tuple.localPort.toString(),
+        //   event:'CONNECT_PIPE',
+        //   SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
+        //   SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
+        //   producerId:'undefined'
+        //   });
       }
       if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -727,27 +755,40 @@ connections.on('connection', async socket => {
           await delay(1000)
         await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
         console.log('connect successful',Producer.id)
-        addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,msg.PORT)
         publishMessage({
           Topic:topicName, 
-          data:"can Produce",
+          data:"Connect Pipe",
           IP: AnnouncedIP,
-          PORT:'Produce',
-          event:'canProduce',
-          SRTP : 'undefined',
-          producerId:Producer.id
-          });
-        // publishMessage(topicName, "Consume",Pipe1.tuple.localPort,'canConsume',producerId= Producer.id);
+          PORT:Pipe1.tuple.localPort.toString(),
+          event:'CONNECT_PIPE',
+          SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
+          SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
+          producerId:'undefined'
+        });
+        
+        // publishMessage({
+        //   Topic:topicName, 
+        //   data:"can Produce",
+        //   IP: AnnouncedIP,
+        //   PORT:'Produce',
+        //   event:'PIPE_PRODUCE',
+        //   SRTP : 'undefined',
+        //   producerId:Producer.id
+        //   });
+
+        // publishMessage(topicName, "Consume",Pipe1.tuple.localPort,'PIPE_CONSUME',producerId= Producer.id);
       }
-      if(msg.event==='canConsume'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='PIPE_CONSUME'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Can Consume event!!!!',JSON.parse(msg.data));
+        console.log('PIPE_CONSUME event!!!!',JSON.parse(msg.data));
         // pipeconsumer = Pipe1.consume({producerId:Producer.id});
+        addPipe(pipeproducer,pipeconsumer, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0])
+        informConsumers(roomName, socket.id, Producer.id,true)
       }
-      if(msg.event==='canProduce'&&msg.IP!==AnnouncedIP){
+      if(msg.event==='PIPE_PRODUCE'&&msg.IP!==AnnouncedIP){
         message.ack();
         const rtpCapabilities = router1.rtpCapabilities
-        console.log('canProduce Event');
+        console.log('PIPE_PRODUCE Event');
         try {
             pipeconsumer = await Pipe1.consume({
                 producerId: Producer.id,
@@ -765,7 +806,7 @@ connections.on('connection', async socket => {
           data:JSON.stringify(pipeconsumer.rtpParameters),
           IP: AnnouncedIP,
           PORT:'Produce',
-          event:'canConsume',
+          event:'PIPE_CONSUME',
           SRTP : 'undefined',
           producerId:Producer.id
           });
@@ -805,7 +846,7 @@ connections.on('connection', async socket => {
     // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
     
 
-    informConsumers(roomName, socket.id, Producer.id)
+    informConsumers(roomName, socket.id, Producer.id,false)
 
     callback(Pipe1)
   })

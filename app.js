@@ -591,7 +591,7 @@ connections.on('connection', async socket => {
       )).transport
 
       // check if the router can consume the specified producer
-      if (router.PIPE_CONSUME({
+      if (router.canConsume({
         producerId: remoteProducerId,
         rtpCapabilities
       })) {

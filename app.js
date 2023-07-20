@@ -444,14 +444,14 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addPipe = (producer,consumer, roomName,site,Dir,Port) => {
+  const addPipe = (producer,consumer, roomName,site,Dir,Port,socketID) => {
     pipeproducers = [
       ...pipeproducers,
-      { socketId: socket.id, producer, roomName, site, Dir,Port}
+      { socketId: socketID, producer, roomName, site, Dir,Port}
     ]
     pipeconsumers = [
       ...pipeconsumers,
-      { socketId: socket.id, consumer, roomName, site, Dir,Port}
+      { socketId: socketID, consumer, roomName, site, Dir,Port}
     ]
 
     if(producer===undefined){
@@ -472,6 +472,7 @@ connections.on('connection', async socket => {
         ],
       }
     }
+    
   }
 
   const addConsumer = (consumer, roomName) => {
@@ -506,14 +507,15 @@ connections.on('connection', async socket => {
     callback(producerList)
   })
 
-  const informConsumers = (roomName, socketId, id, PipeorNot) => {
+  const informConsumers = (roomName, socketId, id,PipeorNot) => {
     console.log(`just joined, id ${id} ${roomName}, ${socketId}`)
     // A new producer just joined
     // let all consumers to consume this producer
     if(PipeorNot===true){
       pipeproducers.forEach(producerData => {
+        console.log('PipeorNot',producerData)
         if (producerData.socketId !== socketId && producerData.roomName === roomName) {
-          const producerSocket = peers[producerData.socketId].socket
+          const producerSocket = socket
           // use socket to send producer id to producer
           producerSocket.emit('new-producer', { producerId: id })
         }
@@ -780,10 +782,15 @@ connections.on('connection', async socket => {
       }
       if(msg.event==='PIPE_CONSUME'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('PIPE_CONSUME event!!!!',JSON.parse(msg.data));
-        // pipeconsumer = Pipe1.consume({producerId:Producer.id});
-        addPipe(pipeproducer,pipeconsumer, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0])
-        informConsumers(roomName, socket.id, Producer.id,true)
+        // console.log('PIPE_CONSUME event!!!!',JSON.parse(msg.data));
+        pipeproducer = await Pipe1.produce({
+          kind:'video',
+          rtpParameters:JSON.parse(msg.data),
+        })
+        // pipeproducer.resume()
+        addPipe(pipeproducer,pipeconsumer, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
+        console.log('PIPE_CONSUME',pipeproducer.id)
+        informConsumers(roomName, socket.id, pipeproducer.id,true)
       }
       if(msg.event==='PIPE_PRODUCE'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -807,6 +814,7 @@ connections.on('connection', async socket => {
           IP: AnnouncedIP,
           PORT:'Produce',
           event:'PIPE_CONSUME',
+          socketID: socket.id,
           SRTP : 'undefined',
           producerId:Producer.id
           });

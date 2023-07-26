@@ -15,6 +15,7 @@ const __dirname = path.resolve()
 import { Server } from 'socket.io'
 import mediasoup from 'mediasoup'
 import {PubSub} from '@google-cloud/pubsub'
+import e from 'express'
 
 app.get('*', (req, res, next) => {
   const path = '/sfu/'
@@ -140,7 +141,7 @@ async function publishMessage(customAttributes) {
   //     Srtp_keyBase: SRTP.keyBase64,
   //   };
   // }
-  console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.PORT)
+  console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.Dir)
   const messageId = await pub.topic(customAttributes.Topic).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
@@ -181,7 +182,7 @@ function listenForMessages(subscriptionName, timeout) {
 const messageHandler = message => {
   console.log(`Received message ${message.id}:${pipe}`);
   console.log(`\tData: ${message.data}`);
-  console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Port}`);
+  console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Dir}`);
   // if(message.attributes.Add==='true'){
   //   incoming.IP.push(message.attributes.IP)
   //   incoming.Port.push(message.attributes.Port)
@@ -299,10 +300,8 @@ connections.on('connection', async socket => {
       Topic:topicName, 
       data:"Create pipe transport",
       IP: AnnouncedIP,
-      PORT:'1',
       event:'CREATE_PIPE',
-      SRTP : 'undefined',
-      producerId:'undefined'
+      Dir:'21'
       });
     // publishMessage(topicName, "Create pipe transport",1,'CREATE_PIPE');
     // create Router if it does not exist
@@ -650,7 +649,8 @@ connections.on('connection', async socket => {
     const { roomName } = peers[socket.id]
     const router1 = rooms[roomName].router
     let Pipe1,Pipe2
-    let pipeconsumer,pipeproducer
+    let pipeconsumer1,pipeproducer1
+    let pipeconsumer2,pipeproducer2
     console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
     // redisCli.on('message',async function(channel,msg){
     //   console.log('redis message in',channel)
@@ -697,37 +697,57 @@ connections.on('connection', async socket => {
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
-      console.log('message in:',msg.event,msg.IP,msg.PORT)
+      console.log('message in:',msg.event,msg.IP,msg.Dir)
       if(msg.event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Creating Pipe')
-        Pipe1 = await router1.createPipeTransport({
-          listenIp: 
-          {
-            ip: '0.0.0.0', // replace with relevant IP address
-            announcedIp: AnnouncedIP,
-          },
-          enableRtx: true,
-          enableSrtp: true,
-        })
-        await delay(1000)
+        console.log('Creating Pipe',msg.Dir)
+        if(msg.Dir === '21'){
+          Pipe1 = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+          publishMessage({
+            Topic:topicName, 
+            data:"Connect Pipe",
+            IP: AnnouncedIP,
+            PORT:Pipe1.tuple.localPort.toString(),
+            event:'CONNECT_PIPE',
+            SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
+            SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
+            Dir:'21',
+          });
+        }else{
+          Pipe2 = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+          publishMessage({
+            Topic:topicName, 
+            data:"Create pipe transport",
+            IP: AnnouncedIP,
+            event:'CREATE_PIPE',
+            Dir:'12'
+          });
+        }
+        // await delay(1000)
         // console.log('Pipe1',Pipe1.srtpParameters)
         // publishMessage(topicName, "IP & Port",Pipe1.tuple.localPort,'CONNECT_PIPE',Pipe1.srtpParameters);
 
-        publishMessage({
-          Topic:topicName, 
-          data:"Connect Pipe",
-          IP: AnnouncedIP,
-          PORT:Pipe1.tuple.localPort.toString(),
-          event:'CONNECT_PIPE',
-          SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
-          SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
-          producerId:'undefined'
-          });
+        
       }
       if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
-        if(Pipe1===undefined){
+        if(Pipe1===undefined&&msg.Dir ==='21'){
           Pipe1 = await router1.createPipeTransport({
             listenIp: 
             {
@@ -738,63 +758,119 @@ connections.on('connection', async socket => {
             enableSrtp: true,
           })
         }
+        if(Pipe2===undefined&&msg.Dir ==='12'){
+          Pipe2 = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+        }
         const port = parseInt(msg.PORT)
-        console.log('Connecting Pipe')
-        incoming.IP.push(msg.IP)
-        incoming.Port.push(msg.PORT)
-        if(Pipe1===undefined)
-          await delay(1000)
-        await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
-        console.log('connect successful',Producer.id)
-        
-        publishMessage({
-          Topic:topicName, 
-          data:"can Produce",
-          IP: AnnouncedIP,
-          PORT:'Produce',
-          event:'PIPE_PRODUCE',
-          SRTP : 'undefined',
-          producerId:Producer.id
+        if(incoming.IP.find(temp => temp==msg.IP)){
+          console.log('Connect already been called')
+          incoming.Port.push(msg.PORT)
+        }else{
+          console.log('Connecting Pipe')
+          incoming.IP.push(msg.IP)
+          incoming.Port.push(msg.PORT)
+          // if(Pipe1===undefined)
+          //   await delay(1000)
+          if(msg.Dir === '21')
+            await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
+          else
+            await Pipe2.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
+          console.log('connect successful',Producer.id)
+        }
+        if(msg.Dir === '21'){
+          publishMessage({
+            Topic:topicName, 
+            data:"can Produce",
+            IP: AnnouncedIP,
+            event:'PIPE_PRODUCE',
+            producerId:Producer.id,
+            Dir:'21'
           });
+        }else{
+          publishMessage({
+            Topic:topicName, 
+            data:"Connect Pipe",
+            IP: AnnouncedIP,
+            PORT:Pipe2.tuple.localPort.toString(),
+            event:'CONNECT_PIPE',
+            SRTP_cryptoSuite :Pipe2.srtpParameters.cryptoSuite,
+            SRTP_keyBase64: Pipe2.srtpParameters.keyBase64,
+            Dir:'12',
+          });
+        }
+        
         // publishMessage(topicName, "Consume",Pipe1.tuple.localPort,'PIPE_CONSUME',producerId= Producer.id);
       }
       if(msg.event==='PIPE_CONSUME'&&msg.IP!==AnnouncedIP){
         message.ack();
         // console.log('PIPE_CONSUME event!!!!',JSON.parse(msg.data));
-        pipeproducer = await Pipe1.produce({
-          kind:'video',
-          rtpParameters:JSON.parse(msg.data),
-        })
+        if(msg.Dir==='21'){
+          pipeproducer1 = await Pipe1.produce({
+            kind:'video',
+            rtpParameters:JSON.parse(msg.data),
+          })
+        }else{
+          pipeproducer2 = await Pipe2.produce({
+            kind:'video',
+            rtpParameters:JSON.parse(msg.data),
+          })
+        }
+        
         // pipeproducer.resume()
-        addPipe(pipeproducer,pipeconsumer, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
-        console.log('PIPE_CONSUME',pipeproducer.id)
-        informConsumers(roomName, socket.id, pipeproducer.id,true)
+        if(msg.Dir==='21'){
+          addPipe(pipeproducer1,pipeconsumer1, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
+          console.log('PIPE_CONSUME',pipeproducer1.id)
+          informConsumers(roomName, socket.id, pipeproducer1.id,true)
+        }else{
+          addPipe(pipeproducer2,pipeconsumer2, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
+          console.log('PIPE_CONSUME',pipeproducer2.id)
+          informConsumers(roomName, socket.id, pipeproducer2.id,true)
+        }
+        
       }
       if(msg.event==='PIPE_PRODUCE'&&msg.IP!==AnnouncedIP){
         message.ack();
         const rtpCapabilities = router1.rtpCapabilities
         console.log('PIPE_PRODUCE Event');
         try {
-            pipeconsumer = await Pipe1.consume({
-                producerId: Producer.id,
-                rtpCapabilities,
-                kind: 'video',
-                paused: false
+          if(msg.Dir==='21'){
+            pipeconsumer1 = await Pipe1.consume({
+              producerId: Producer.id,
+              rtpCapabilities,
+              kind: 'video',
+              paused: false
             })
+          }else{
+            pipeconsumer2 = await Pipe2.consume({
+              producerId: Producer.id,
+              rtpCapabilities,
+              kind: 'video',
+              paused: false
+          })
+          }
+            
         } catch (error) {
-            console.error('video consume failed', error)
+            console.error('video consume failed', error,msg.Dir)
             return
         }
         // console.log(pipeconsumer.rtpParameters)
         publishMessage({
           Topic:topicName, 
-          data:JSON.stringify(pipeconsumer.rtpParameters),
+          data:msg.Dir==='21'?JSON.stringify(pipeconsumer1.rtpParameters):JSON.stringify(pipeconsumer2.rtpParameters),
           IP: AnnouncedIP,
-          PORT:'Produce',
           event:'PIPE_CONSUME',
-          SRTP : 'undefined',
-          producerId:Producer.id
-          });
+          socketID: socket.id,
+          producerId:Producer.id,
+          Dir:msg.Dir==='21'?'21':'12',
+        });
       }
       if(msg.event==='DISCONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -808,7 +884,7 @@ connections.on('connection', async socket => {
       messageCount+=1
       console.log('Message:',incoming.IP,',',incoming.Port)
       setTimeout(() => {
-        subscription.removeListener('message', messageHandler);
+        // subscription.removeListener('message', messageHandler);
         console.log(`${messageCount} message(s) received.`);
       }, 1 * 1000);
     })

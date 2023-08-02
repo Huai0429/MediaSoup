@@ -74,7 +74,8 @@ let redis_ip = '35.194.211.137'
 const pub = new PubSub();
 const sub = new PubSub();
 const flowControl = {
-  maxExtensionMinutes: 0,
+  setMaxOutreadyElementCount: 5,
+  maxExtensionMinutes: 1,
 }
 const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
 
@@ -141,8 +142,12 @@ async function publishMessage(customAttributes) {
   //     Srtp_keyBase: SRTP.keyBase64,
   //   };
   // }
+  const publishOptions = {
+    setMaxOutreadyElementCount: 5,
+    messageOrdering: true,
+  };
   console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.Dir)
-  const messageId = await pub.topic(customAttributes.Topic).publishMessage({data: dataBuffer, attributes: customAttributes})
+  const messageId = await pub.topic(customAttributes.Topic,publishOptions).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
 
@@ -262,20 +267,14 @@ connections.on('connection', async socket => {
     // do some cleanup
     console.log('peer disconnected')
     if(peers[socket.id]!==undefined){
-      if(peers[socket.id]!==undefined){
-        pipeproducers.forEach(item => {
-          if (item.socketId === socket.id) 
-            publishMessage({
-              Topic:topicName, 
-              data:"IP & Port",
-              IP: AnnouncedIP,
-              PORT:item.Port,
-              event:'DISCONNECT_PIPE',
-              SRTP : 'undefined',
-              producerId:'undefined'
-              });
-        })
-      }
+      console.log('peer can be disconnected',socket.id)
+      publishMessage({
+        Topic:topicName, 
+        data:"IP & Port",
+        IP: AnnouncedIP,
+        socketID:socket.id,
+        event:'DISCONNECT_PIPE',
+      });
       consumers = removeItems(consumers, socket.id, 'consumer')
       producers = removeItems(producers, socket.id, 'producer')
       pipeproducers = removeItems(pipeproducers, socket.id, 'producer')
@@ -301,7 +300,8 @@ connections.on('connection', async socket => {
       data:"Create pipe transport",
       IP: AnnouncedIP,
       event:'CREATE_PIPE',
-      Dir:'21'
+      Dir:'21',
+      orderingKey:'1',
       });
     // publishMessage(topicName, "Create pipe transport",1,'CREATE_PIPE');
     // create Router if it does not exist
@@ -720,6 +720,7 @@ connections.on('connection', async socket => {
             SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
             SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
             Dir:'21',
+            orderingKey:'3',
           });
         }else{
           Pipe2 = await router1.createPipeTransport({
@@ -736,7 +737,8 @@ connections.on('connection', async socket => {
             data:"Create pipe transport",
             IP: AnnouncedIP,
             event:'CREATE_PIPE',
-            Dir:'12'
+            Dir:'12',
+            orderingKey:'8',
           });
         }
         // await delay(1000)
@@ -770,7 +772,7 @@ connections.on('connection', async socket => {
           })
         }
         const port = parseInt(msg.PORT)
-        if(incoming.IP.find(temp => temp==msg.IP)){
+        if(incoming.Port.find(temp => temp==msg.PORT)){
           console.log('Connect already been called')
           incoming.Port.push(msg.PORT)
         }else{
@@ -792,7 +794,8 @@ connections.on('connection', async socket => {
             IP: AnnouncedIP,
             event:'PIPE_PRODUCE',
             producerId:Producer.id,
-            Dir:'21'
+            Dir:'21',
+            orderingKey:'5',
           });
         }else{
           publishMessage({
@@ -804,6 +807,7 @@ connections.on('connection', async socket => {
             SRTP_cryptoSuite :Pipe2.srtpParameters.cryptoSuite,
             SRTP_keyBase64: Pipe2.srtpParameters.keyBase64,
             Dir:'12',
+            orderingKey:'10',
           });
         }
         
@@ -846,14 +850,14 @@ connections.on('connection', async socket => {
               producerId: Producer.id,
               rtpCapabilities,
               kind: 'video',
-              paused: false
+              paused: true
             })
           }else{
             pipeconsumer2 = await Pipe2.consume({
               producerId: Producer.id,
               rtpCapabilities,
               kind: 'video',
-              paused: false
+              paused: true
           })
           }
             
@@ -870,15 +874,23 @@ connections.on('connection', async socket => {
           socketID: socket.id,
           producerId:Producer.id,
           Dir:msg.Dir==='21'?'21':'12',
+          orderingKey:'12',
         });
       }
       if(msg.event==='DISCONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
-        console.log('Disconnecting Pipe',Producer.id)
-        let index = incoming.IP.indexOf(msg.IP);
-        incoming.IP.splice(index, 1);
-        index = incoming.Port.indexOf(msg.Port);
-        incoming.Port.splice(index, 1);
+        console.log('Remote Disconnecting',msg.socketID)
+        pipeproducers.forEach(item => { 
+          if(item.socketId===msg.socketID){
+            let index = incoming.Port.indexOf(item.Port);
+            console.log('Port :',msg.PORT,'disconnect')
+            incoming.Port.splice(index, 1);
+          }
+        })
+        pipeproducers = removeItems(pipeproducers, msg.socketID, 'producer')
+        pipeconsumers = removeItems(pipeconsumers, msg.socketID, 'consumer')
+        // let index = incoming.IP.indexOf(msg.IP);
+        // incoming.IP.splice(index, 1);
       }
 
       messageCount+=1

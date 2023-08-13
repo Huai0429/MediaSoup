@@ -55,6 +55,7 @@ let worker
 let rooms = {}          // { roomName1: { Router, rooms: [ sicketId1, ... ] }, ...}
 let peers = {}          // { socketId1: { roomName1, socket, transports = [id1, id2,] }, producers = [id1, id2,] }, consumers = [id1, id2,], peerDetails }, ...}
 let transports = []     // [ { socketId1, roomName1, transport, consumer }, ... ]
+let Pipetransports = []
 let producers = []      // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []      // [ { socketId1, roomName1, consumer, }, ... ]
 let pipeproducers = []
@@ -399,7 +400,7 @@ connections.on('connection', async socket => {
         })
 
         // add transport to Peer's properties
-        addTransport(transport, roomName, consumer,OnVM)
+        addTransport(transport, roomName, consumer,OnVM, false)
       },
       error => {
         console.log(error)
@@ -407,18 +408,24 @@ connections.on('connection', async socket => {
   })
 
   const addTransport = (transport, roomName, consumer, OnVM) => {
-
-    transports = [
-      ...transports,
-      { socketId: socket.id, transport, roomName, consumer, OnVM}
-    ]
-
-    peers[socket.id] = {
-      ...peers[socket.id],
-      transports: [
-        ...peers[socket.id].transports,
-        transport.id,
+    if(transport.appData.forPipe){
+      Pipetransports = [
+        ...Pipetransports,
+        { socketId: socket.id, transport, roomName,appData:transport.appData}
       ]
+    }else{
+      transports = [
+        ...transports,
+        { socketId: socket.id, transport, roomName, consumer, OnVM}
+      ]
+
+      peers[socket.id] = {
+        ...peers[socket.id],
+        transports: [
+          ...peers[socket.id].transports,
+          transport.id,
+        ]
+      }
     }
   }
 
@@ -528,23 +535,34 @@ connections.on('connection', async socket => {
     
   }
 
-  const getTransport = (socketId) => {
-    const [producerTransport] = transports.filter(transport => transport.socketId === socketId && !transport.consumer)
-    return producerTransport.transport
+  const getTransport = (socketId,ForPipe,Dir) => {
+    if(ForPipe){
+      const [pipetransport] = Pipetransports.filter((transport) => {
+        if(transport.appData.Dir === Dir&& !transport.appData.Connect){
+          transport.appData.Connect = true
+          return transport
+        }
+      });
+      // pipetransport.forEach(item => item.Pipe.Connect = true)
+      return pipetransport.transport
+    }else{
+      const [producerTransport] = transports.filter(transport => transport.socketId === socketId && !transport.consumer)
+      return producerTransport.transport
+    }
   }
 
   // see client's socket.emit('transport-connect', ...)
   socket.on('transport-connect', ({ dtlsParameters }) => {
     console.log('DTLS PARAMS... ', { dtlsParameters })
     
-    getTransport(socket.id).connect({ dtlsParameters })
+    getTransport(socket.id,false).connect({ dtlsParameters })
   })
 
   // see client's socket.emit('transport-produce', ...)
   socket.on('transport-produce', async ({ kind, rtpParameters, appData, OnVM}, callback) => {
     // call produce based on the prameters from the client
     console.log('transport-produce',OnVM)
-    const producer = await getTransport(socket.id).produce({
+    const producer = await getTransport(socket.id,false).produce({
       kind,
       rtpParameters,
     })
@@ -711,6 +729,10 @@ connections.on('connection', async socket => {
             enableRtx: true,
             enableSrtp: true,
           })
+          Pipe1.appData['forPipe']=true
+          Pipe1.appData['Connect']=false
+          Pipe1.appData['Dir']=msg.Dir
+          addTransport(Pipe1, roomName, false,false)
           publishMessage({
             Topic:topicName, 
             data:"Connect Pipe",
@@ -732,6 +754,10 @@ connections.on('connection', async socket => {
             enableRtx: true,
             enableSrtp: true,
           })
+          Pipe2.appData['forPipe']=true
+          Pipe2.appData['Connect']=false
+          Pipe2.appData['Dir']=msg.Dir
+          addTransport(Pipe2, roomName, false,false)
           publishMessage({
             Topic:topicName, 
             data:"Create pipe transport",
@@ -759,6 +785,10 @@ connections.on('connection', async socket => {
             enableRtx: true,
             enableSrtp: true,
           })
+          Pipe1.appData['forPipe']=true
+          Pipe1.appData['Connect']=false
+          Pipe1.appData['Dir']=msg.Dir
+          addTransport(Pipe1, roomName, false,false)
         }
         if(Pipe2===undefined&&msg.Dir ==='12'){
           Pipe2 = await router1.createPipeTransport({
@@ -770,23 +800,27 @@ connections.on('connection', async socket => {
             enableRtx: true,
             enableSrtp: true,
           })
+          Pipe2.appData['forPipe']=true
+          Pipe2.appData['Connect']=false
+          Pipe2.appData['Dir']=msg.Dir
+          addTransport(Pipe2, roomName, false,false)
         }
         const port = parseInt(msg.PORT)
-        if(incoming.Port.find(temp => temp==msg.PORT)){
-          console.log('Connect already been called')
-          incoming.Port.push(msg.PORT)
-        }else{
-          console.log('Connecting Pipe')
-          incoming.IP.push(msg.IP)
-          incoming.Port.push(msg.PORT)
-          // if(Pipe1===undefined)
-          //   await delay(1000)
-          if(msg.Dir === '21')
-            await Pipe1.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
-          else
-            await Pipe2.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
-          console.log('connect successful',Producer.id)
+        if(msg.Dir === '21'){
+          const transport = getTransport(socket.id,true,msg.Dir)
+          console.log('connecting Pipe1',transport)
+          await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
+          // transport.Pipe.Connect = true
+          console.log('connecting Pipe1 successful',transport.Pipe)
         }
+        else{
+          const transport = getTransport(socket.id,true,msg.Dir)
+          console.log('connecting Pipe2',transport)
+          await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
+          // transport.Pipe.Connect = true
+          console.log('connecting Pipe2 successful',transport.Pipe)
+        }
+        console.log('connect successful')
         if(msg.Dir === '21'){
           publishMessage({
             Topic:topicName, 

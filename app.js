@@ -6,7 +6,6 @@
 /* https://mediasoup.org/documentation/v3/mediasoup/installation/ */
 import express from 'express'
 const app = express()
-import redis from 'redis'
 import https from 'httpolyglot'
 import fs from 'fs'
 import path from 'path'
@@ -81,6 +80,7 @@ const subscription = sub.subscription(subscriptionName,{ flowControl: flowContro
 async function publishMessage(customAttributes) {
   const dataBuffer = Buffer.from(customAttributes.data);
   const publishOptions = {
+    setMaxOutreadyElementCount: 5,
     messageOrdering: true,
   };
   console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.Dir)
@@ -282,7 +282,7 @@ connections.on('connection', async socket => {
         })
 
         // add transport to Peer's properties
-        addTransport(transport, roomName, consumer,OnVM,false)
+        addTransport(transport, roomName, consumer,OnVM, false)
       },
       error => {
         console.log(error)
@@ -655,7 +655,6 @@ connections.on('connection', async socket => {
           console.log('connecting Pipe2 successful',transport.appData)
         }
         console.log('connect successful')
-        // }
         if(msg.Dir==='21'){
           publishMessage({
             Topic:topicName, 
@@ -773,7 +772,6 @@ connections.on('connection', async socket => {
       }, 1 * 1000);
     })
     informConsumers(roomName, socket.id, Producer.id,false)
-
     callback(Pipe1)
   })
 })

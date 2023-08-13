@@ -6,7 +6,6 @@
 /* https://mediasoup.org/documentation/v3/mediasoup/installation/ */
 import express from 'express'
 const app = express()
-import redis from 'redis'
 import https from 'httpolyglot'
 import fs from 'fs'
 import path from 'path'
@@ -15,7 +14,6 @@ const __dirname = path.resolve()
 import { Server } from 'socket.io'
 import mediasoup from 'mediasoup'
 import {PubSub} from '@google-cloud/pubsub'
-import e from 'express'
 
 app.get('*', (req, res, next) => {
   const path = '/sfu/'
@@ -78,18 +76,6 @@ const flowControl = {
   maxExtensionMinutes: 1,
 }
 const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
-
-async function createTopic(
-  projectId = ProjectID , // Your Google Cloud Platform project ID
-  topicName = topicName // Name for the new topic to create
-) {
-  // Instantiates a client
-  const pubsub = new PubSub({ projectId });
-
-  // Creates the new topic
-  const [topic] = await pubsub.createTopic(topicName);
-  console.log(`Topic ${topic.name} created.`);
-}
 
 async function publishMessage(customAttributes) {
   const dataBuffer = Buffer.from(customAttributes.data);
@@ -654,17 +640,17 @@ connections.on('connection', async socket => {
         const port = parseInt(msg.PORT)
         if(msg.Dir === '21'){
           const transport = getTransport(socket.id,true,msg.Dir)
-          console.log('connecting Pipe1',transport)
+          console.log('connecting Pipe1')
           await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
           // transport.Pipe.Connect = true
-          console.log('connecting Pipe1 successful',transport.Pipe)
+          console.log('connecting Pipe1 successful',transport.appData)
         }
         else{
           const transport = getTransport(socket.id,true,msg.Dir)
-          console.log('connecting Pipe2',transport)
+          console.log('connecting Pipe2')
           await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
           // transport.Pipe.Connect = true
-          console.log('connecting Pipe2 successful',transport.Pipe)
+          console.log('connecting Pipe2 successful',transport.appData)
         }
         console.log('connect successful')
         if(msg.Dir === '21'){
@@ -716,7 +702,6 @@ connections.on('connection', async socket => {
           console.log('PIPE_CONSUME',pipeproducer2.id)
           informConsumers(roomName, socket.id, pipeproducer2.id,true)
         }
-        
       }
       if(msg.event==='PIPE_PRODUCE'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -776,7 +761,6 @@ connections.on('connection', async socket => {
         console.log(`${messageCount} message(s) received.`);
       }, 1 * 1000);
     })
-    console.log('Pipe which producer',Producer.id)
     informConsumers(roomName, socket.id, Producer.id,false)
     callback(Pipe1)
   })

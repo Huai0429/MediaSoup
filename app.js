@@ -70,7 +70,6 @@ let AnnouncedIP = '35.236.182.41'
 let selector = true
 let VM1_IP = '35.236.182.41'
 let VM2_IP = '35.194.157.28'
-let redis_ip = '35.194.211.137'
 const pub = new PubSub();
 const sub = new PubSub();
 const flowControl = {
@@ -79,69 +78,8 @@ const flowControl = {
 }
 const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
 
-const redisCli = redis.createClient('6379',redis_ip);
-(async () => {
-  await redisCli.connect();
-})();
-redisCli.on('error',function(error){
-  console.error('redis client error',error);
-})
-
-redisCli.on("ready", () => {
-  console.log("Connected!");
-  console.log(redisCli.isReady)
-  redisCli.subscribe("REQUESTFORPIPING")
-  // redisCli.set("key", "value", redis.print);
-  // redisCli.get("key", redis.print);
-});
-
-
-
-async function createTopic(
-  projectId = ProjectID , // Your Google Cloud Platform project ID
-  topicName = topicName // Name for the new topic to create
-) {
-  // Instantiates a client
-  const pubsub = new PubSub({ projectId });
-
-  // Creates the new topic
-  const [topic] = await pubsub.createTopic(topicName);
-  console.log(`Topic ${topic.name} created.`);
-}
-
 async function publishMessage(customAttributes) {
-
-  // publishMessage({
-  //   Topic:topicName, 
-  //   data:"Consume",
-  //   IP: AnnouncedIP,
-  //   PORT:'Consume',
-  //   event:'PIPE_CONSUME',
-  //   SRTP : 'undefined',
-  //   producerId:Producer.id
-  //   });
-  // topicName, data, PORT,event,SRTP = 'undefined',producerId='undefined'
-
   const dataBuffer = Buffer.from(customAttributes.data);
-  // PORT = PORT.toString()
-  // let customAttributes
-  // if(SRTP==='undefined'){
-  //   customAttributes = {
-  //     Event:event,
-  //     IP: AnnouncedIP,
-  //     Port: PORT,
-  //     Srtp: SRTP,
-  //     ProducerID:producerId,
-  //   };
-  // }else {
-  //   customAttributes = {
-  //     Event:event,
-  //     IP: AnnouncedIP,
-  //     Port: PORT,
-  //     Srtp_Suite: SRTP.cryptoSuite,
-  //     Srtp_keyBase: SRTP.keyBase64,
-  //   };
-  // }
   const publishOptions = {
     messageOrdering: true,
   };
@@ -149,61 +87,6 @@ async function publishMessage(customAttributes) {
   const messageId = await pub.topic(customAttributes.Topic,publishOptions).publishMessage({data: dataBuffer, attributes: customAttributes})
   console.log(`Message ${messageId} published.`);
 }
-
-function listenForMessages(subscriptionName, timeout) {
-  // const pubsub = new PubSub();
-  const subscription = sub.subscription(subscriptionName);
-  // Create an event handler to handle messages
-  let messageCount = 0;
-  // const messageHandler = message => {
-  //   console.log(`Received message ${message.id}:`);
-  //   console.log(`\tData: ${message.data}`);
-  //   console.log(`\tAttributes: ${message.attributes},${message.attributes.Add},${message.attributes.IP},${message.attributes.Port}`);
-  //   if(message.attributes.Add==='true'){
-  //     incoming.IP.push(message.attributes.IP)
-  //     incoming.Port.push(message.attributes.Port)
-  //   }else{
-  //     let index = incoming.IP.indexOf(message.attributes.IP);
-  //     incoming.IP.splice(index, 1);
-  //     index = incoming.Port.indexOf(message.attributes.Port);
-  //     incoming.Port.splice(index, 1);
-  //   }
-    
-  //   messageCount += 1;
-
-  //   // "Ack" (acknowledge receipt of) the message
-  //   message.ack();
-  //   console.log('Message:',incoming.IP,',',incoming.Port)
-  // };
-  // subscription.on(`message`, messageHandler);
-
-  // setTimeout(() => {
-  //   subscription.removeListener('message', messageHandler);
-  //   console.log(`${messageCount} message(s) received.`);
-  // }, timeout * 1000);
-}
-
-const messageHandler = message => {
-  console.log(`Received message ${message.id}:${pipe}`);
-  console.log(`\tData: ${message.data}`);
-  console.log(`\tAttributes: ${message.attributes},${message.attributes.IP},${message.attributes.Dir}`);
-  // if(message.attributes.Add==='true'){
-  //   incoming.IP.push(message.attributes.IP)
-  //   incoming.Port.push(message.attributes.Port)
-  // }else{
-  //   let index = incoming.IP.indexOf(message.attributes.IP);
-  //   incoming.IP.splice(index, 1);
-  //   index = incoming.Port.indexOf(message.attributes.Port);
-  //   incoming.Port.splice(index, 1);
-  // }
-  
-  // messageCount += 1;
-
-  // "Ack" (acknowledge receipt of) the message
-  message.ack();
-  console.log('Message:',incoming.IP,',',incoming.Port)
-};
-
 
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
@@ -542,7 +425,6 @@ connections.on('connection', async socket => {
           return transport
         }
       });
-      // pipetransport.forEach(item => item.Pipe.Connect = true)
       return pipetransport.transport
     }else{
       const [producerTransport] = transports.filter(transport => transport.socketId === socketId && !transport.consumer)
@@ -669,48 +551,6 @@ connections.on('connection', async socket => {
     let pipeconsumer1,pipeproducer1
     let pipeconsumer2,pipeproducer2
     console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
-    // redisCli.on('message',async function(channel,msg){
-    //   console.log('redis message in',channel)
-    //   const message = JSON.parse(msg)
-    //   if (channel === 'REQUESTFORPIPING' && message.signature !== AnnouncedIP) {
-    //     if (message.type === 'CREATE_PIPE') {
-    //       console.log('Incoming message CREATE_PIPE',message)
-    //       Pipe1 = await router1.createPipeTransport({
-    //         listenIp: 
-    //         {
-    //           ip: '0.0.0.0', // replace with relevant IP address
-    //           announcedIp: AnnouncedIP,
-    //         },
-    //         enableRtx: true,
-    //         enableSrtp: true,
-    //       })
-    //       addPipe(Pipe1,Pipe1, roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
-    //       redisCli.publish('REQUESTFORPIPING', JSON.stringify({
-    //         type: 'CREATE_PIPE',
-    //         signature: AnnouncedIP,
-    //         roomId: roomName,
-    //         requestedIp: message.signature
-    //       }))
-    //     }
-    //     if (message.type === 'CONNECT_PIPE') {
-    //       console.log('Incoming message CONNECT_PIPE',message)
-    //       await Pipe1.connect({
-    //           ip: message.remoteIp,
-    //           port: message.remotePort,
-    //           srtpParameters: message.srtpParameters
-    //       })
-    //       redisCli.publish('REQUESTFORPIPING', JSON.stringify({
-    //           type: 'CONNECT_PIPE',
-    //           remoteIp: Pipe1.tuple.localIp,
-    //           remotePort: Pipe1.tuple.localPort,
-    //           srtpParameters: Pipe1.srtpParameters,
-    //           signature: AnnouncedIP,
-    //           roomId: roomName,
-    //           requestedIp: message.signature
-    //       }))
-    //     }
-    //   }
-    // })
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
@@ -766,21 +606,6 @@ connections.on('connection', async socket => {
             orderingKey:'9',
           });
         }
-        
-        // await delay(1000)
-        // console.log('Pipe1',Pipe1.srtpParameters)
-        
-        
-        // publishMessage({
-        //   Topic:topicName, 
-        //   data:"Connect Pipe",
-        //   IP: AnnouncedIP,
-        //   PORT:Pipe1.tuple.localPort.toString(),
-        //   event:'CONNECT_PIPE',
-        //   SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
-        //   SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
-        //   producerId:'undefined'
-        //   });
       }
       if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -815,28 +640,19 @@ connections.on('connection', async socket => {
           addTransport(Pipe2, roomName, false,false)
         }
         const port = parseInt(msg.PORT)
-        // if(Pipe1.appData.Connect&&Pipe2.appData.Connect){
-        //   console.log('Connect already been called')
-        //   incoming.Port.push(msg.PORT)
-        // }else{
-        //   console.log('Connecting Pipe')
-        //   incoming.IP.push(msg.IP)
-        //   incoming.Port.push(msg.PORT)
-        //   // if(Pipe1===undefined)
-        //   //   await delay(1000)
         if(msg.Dir === '21'){
           const transport = getTransport(socket.id,true,msg.Dir)
-          console.log('connecting Pipe1',transport)
+          console.log('connecting Pipe1')
           await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
           // transport.Pipe.Connect = true
-          console.log('connecting Pipe1 successful',transport.Pipe)
+          console.log('connecting Pipe1 successful',transport.appData)
         }
         else{
           const transport = getTransport(socket.id,true,msg.Dir)
-          console.log('connecting Pipe2',transport)
+          console.log('connecting Pipe2')
           await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
           // transport.Pipe.Connect = true
-          console.log('connecting Pipe2 successful',transport.Pipe)
+          console.log('connecting Pipe2 successful',transport.appData)
         }
         console.log('connect successful')
         // }
@@ -863,19 +679,6 @@ connections.on('connection', async socket => {
             orderingKey:'11',
           });
         }
-        
-        
-        // publishMessage({
-        //   Topic:topicName, 
-        //   data:"can Produce",
-        //   IP: AnnouncedIP,
-        //   PORT:'Produce',
-        //   event:'PIPE_PRODUCE',
-        //   SRTP : 'undefined',
-        //   producerId:Producer.id
-        //   });
-
-        // publishMessage(topicName, "Consume",Pipe1.tuple.localPort,'PIPE_CONSUME',producerId= Producer.id);
       }
       if(msg.event==='PIPE_CONSUME'&&msg.IP!==AnnouncedIP){
         message.ack();
@@ -954,14 +757,12 @@ connections.on('connection', async socket => {
         pipeproducers.forEach(item => { 
           if(item.socketId===msg.socketID){
             let index = incoming.Port.indexOf(item.Port);
-            console.log('Port :',msg.PORT,'disconnect')
+            console.log('Port :',item.Port[index],'disconnect')
             incoming.Port.splice(index, 1);
           }
         })
         pipeproducers = removeItems(pipeproducers, msg.socketID, 'producer')
         pipeconsumers = removeItems(pipeconsumers, msg.socketID, 'consumer')
-        // let index = incoming.IP.indexOf(msg.IP);
-        // incoming.IP.splice(index, 1);
       }
 
       messageCount+=1
@@ -971,25 +772,6 @@ connections.on('connection', async socket => {
         console.log(`${messageCount} message(s) received.`);
       }, 1 * 1000);
     })
-    // console.log(incoming.IP.slice(-1)[0],incoming.Port.slice(-1)[0])
-    // await Pipe1.connect({ip: incoming.IP.slice(-1)[0], port: incoming.Port.slice(-1)[0]});
-    
-    
-    
-
-    console.log('Pipe which producer',Producer.id)
-    // const PipeID = await From.pipeToRouter({
-    //   producerId:Producer.id,
-    //   router:To1
-    // })
-
-
-//  console.log('PipeID',PipeID.pipeProducer.id,PipeID.pipeConsumer.id)
-    // addPipe('PipeID.pipeProducer','PipeID.pipeConsumer', roomName,Producer.OnVM,Producer.consumer,Pipe1.tuple.localPort)
-
-    // informConsumers(roomName, socket.id, PipeID.pipeProducer.id,Producer.OnRouter,Producer.consumer)
-    
-
     informConsumers(roomName, socket.id, Producer.id,false)
 
     callback(Pipe1)

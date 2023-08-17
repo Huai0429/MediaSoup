@@ -66,9 +66,6 @@ let ProjectID = 'mplus-video-conference-dev'
 let topicName = 'mediasoupv1'
 let subscriptionName = 'mediasoupv2-sub'
 let AnnouncedIP = '35.236.182.41'
-let selector = true
-let VM1_IP = '35.236.182.41'
-let VM2_IP = '35.194.157.28'
 const pub = new PubSub();
 const sub = new PubSub();
 const flowControl = {
@@ -206,16 +203,11 @@ connections.on('connection', async socket => {
         isAdmin: false,   // Is this Peer the Admin?
       }
     }
-    if(AnnouncedIP === VM1_IP){
-      selector = true
-    }else{
-      selector = false
-    }
     // get Router RTP Capabilities
     const rtpCapabilities = router1.rtpCapabilities
-    console.log('joinRoom',selector)
+    console.log('joinRoom')
     // call callback from the client and send back the rtpCapabilities
-    callback({ rtpCapabilities ,selector })
+    callback({ rtpCapabilities })
   })
 
   const createRoom = async (roomName, socketId) => {
@@ -265,10 +257,10 @@ connections.on('connection', async socket => {
 
   // Client emits a request to create server side Transport
   // We need to differentiate between the producer and consumer transports
-  socket.on('createWebRtcTransport', async ({ consumer ,OnVM}, callback) => {
+  socket.on('createWebRtcTransport', async ({ consumer}, callback) => {
     const roomName = peers[socket.id].roomName
     const router = rooms[roomName].router
-    console.log('createWebRtcTransport for consumer',consumer,'on VM :',OnVM?'1':'2')
+    console.log('createWebRtcTransport for consumer',consumer)
 
     createWebRtcTransport(router).then(
       transport => {
@@ -282,14 +274,14 @@ connections.on('connection', async socket => {
         })
 
         // add transport to Peer's properties
-        addTransport(transport, roomName, consumer,OnVM, false)
+        addTransport(transport, roomName, consumer, false)
       },
       error => {
         console.log(error)
       })
   })
 
-  const addTransport = (transport, roomName, consumer, OnVM) => {
+  const addTransport = (transport, roomName, consumer) => {
     if(transport.appData.forPipe){
       Pipetransports = [
         ...Pipetransports,
@@ -298,7 +290,7 @@ connections.on('connection', async socket => {
     }else{
       transports = [
         ...transports,
-        { socketId: socket.id, transport, roomName, consumer, OnVM}
+        { socketId: socket.id, transport, roomName, consumer}
       ]
 
       peers[socket.id] = {
@@ -311,10 +303,10 @@ connections.on('connection', async socket => {
     }
   }
 
-  const addProducer = (producer, roomName, OnVM) => {
+  const addProducer = (producer, roomName) => {
     producers = [
       ...producers,
-      { socketId: socket.id, producer, roomName, OnVM}
+      { socketId: socket.id, producer, roomName}
     ]
 
     peers[socket.id] = {
@@ -325,7 +317,6 @@ connections.on('connection', async socket => {
       ],
       OnVM_P: [
         ...peers[socket.id].OnVM_P,
-        OnVM,
       ]
     }
   }
@@ -440,9 +431,9 @@ connections.on('connection', async socket => {
   })
 
   // see client's socket.emit('transport-produce', ...)
-  socket.on('transport-produce', async ({ kind, rtpParameters, appData, OnVM}, callback) => {
+  socket.on('transport-produce', async ({ kind, rtpParameters, appData}, callback) => {
     // call produce based on the prameters from the client
-    console.log('transport-produce',OnVM)
+    console.log('transport-produce')
     const producer = await getTransport(socket.id,false).produce({
       kind,
       rtpParameters,
@@ -451,7 +442,7 @@ connections.on('connection', async socket => {
     // add producer to the producers array
     const { roomName } = peers[socket.id]
 
-    addProducer(producer, roomName, OnVM)
+    addProducer(producer, roomName)
 
     // informConsumers(roomName, socket.id, producer.id)
 
@@ -550,7 +541,7 @@ connections.on('connection', async socket => {
     let Pipe1,Pipe2
     let pipeconsumer1,pipeproducer1
     let pipeconsumer2,pipeproducer2
-    console.log('PipeOut Dir :',Producer.OnVM,Producer.consumer)
+    console.log('PipeOut Dir :',Producer.consumer)
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
@@ -696,11 +687,11 @@ connections.on('connection', async socket => {
         
         // pipeproducer.resume()
         if(msg.Dir==='21'){
-          addPipe(pipeproducer1,pipeconsumer1, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
+          addPipe(pipeproducer1,pipeconsumer1, roomName,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
           console.log('PIPE_CONSUME',pipeproducer1.id)
           informConsumers(roomName, socket.id, pipeproducer1.id,true)
         }else{
-          addPipe(pipeproducer2,pipeconsumer2, roomName,Producer.OnVM,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
+          addPipe(pipeproducer2,pipeconsumer2, roomName,Producer.consumer,incoming.Port.slice(-1)[0],msg.socketID)
           console.log('PIPE_CONSUME',pipeproducer2.id)
           informConsumers(roomName, socket.id, pipeproducer2.id,true)
         }

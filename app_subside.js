@@ -543,7 +543,7 @@ connections.on('connection', async socket => {
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
-      console.log('message in:',msg.event,msg.IP,msg.Dir)
+      console.log('message in:',msg.event,msg.IP,msg.Dir,message.id)
       if(msg.event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
         console.log('Creating Pipe',msg.Dir)

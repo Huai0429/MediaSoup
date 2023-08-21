@@ -283,7 +283,7 @@ connections.on('connection', async socket => {
     if(transport.appData.forPipe){
       Pipetransports = [
         ...Pipetransports,
-        { socketId: socket.id, transport, roomName,appData:transport.appData}
+        { socketId: socket.id, transport, roomName,appData:transport.appData,consumer}
       ]
     }else{
       transports = [
@@ -536,7 +536,7 @@ connections.on('connection', async socket => {
   socket.on('PipeOut', async(Producer,callback) => {
     const { roomName } = peers[socket.id]
     const router1 = rooms[roomName].router
-    let Pipe1,Pipe2
+    let Pipe1ID,Pipe2ID
     let pipeconsumer1,pipeproducer1
     let pipeconsumer2,pipeproducer2
     console.log('PipeOut Dir :',Producer.consumer)
@@ -547,104 +547,48 @@ connections.on('connection', async socket => {
       if(msg.event==='CREATE_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
         console.log('Creating Pipe',msg.Dir)
-        if(msg.Dir === '21'){
-          Pipe1 = await router1.createPipeTransport({
-            listenIp: 
-            {
-              ip: '0.0.0.0', // replace with relevant IP address
-              announcedIp: AnnouncedIP,
-            },
-            enableRtx: true,
-            enableSrtp: true,
+        CreatePipeTranports(msg.Dir).then(
+          transport => {
+            // add transport to Peer's properties
+            if(msg.Dir === '21'){
+              addTransport(transport, roomName, false)
+              Pipe1ID = transport.id
+              publishMessage({
+                Topic:topicName, 
+                data:"Connect Pipe",
+                IP: AnnouncedIP,
+                PORT:transport.tuple.localPort.toString(),
+                event:'CONNECT_PIPE',
+                SRTP_cryptoSuite :transport.srtpParameters.cryptoSuite,
+                SRTP_keyBase64: transport.srtpParameters.keyBase64,
+                Dir:'21',
+                orderingKey:'3',
+              });
+            }else{
+              addTransport(transport, roomName, true)
+              Pipe2ID = transport.id
+              publishMessage({
+                Topic:topicName, 
+                data:"Create pipe transport",
+                IP: AnnouncedIP,
+                event:'CREATE_PIPE',
+                Dir:'12',
+                orderingKey:'8',
+              });
+            }
+            
+          },
+          error => {
+            console.log(error)
           })
-          Pipe1.appData['forPipe']=true
-          Pipe1.appData['Connect']=false
-          Pipe1.appData['Dir']=msg.Dir
-          addTransport(Pipe1, roomName, false,false)
-          publishMessage({
-            Topic:topicName, 
-            data:"Connect Pipe",
-            IP: AnnouncedIP,
-            PORT:Pipe1.tuple.localPort.toString(),
-            event:'CONNECT_PIPE',
-            SRTP_cryptoSuite :Pipe1.srtpParameters.cryptoSuite,
-            SRTP_keyBase64: Pipe1.srtpParameters.keyBase64,
-            Dir:'21',
-            orderingKey:'3',
-          });
-        }else{
-          Pipe2 = await router1.createPipeTransport({
-            listenIp: 
-            {
-              ip: '0.0.0.0', // replace with relevant IP address
-              announcedIp: AnnouncedIP,
-            },
-            enableRtx: true,
-            enableSrtp: true,
-          })
-          Pipe2.appData['forPipe']=true
-          Pipe2.appData['Connect']=false
-          Pipe2.appData['Dir']=msg.Dir
-          addTransport(Pipe2, roomName, false,false)
-          publishMessage({
-            Topic:topicName, 
-            data:"Create pipe transport",
-            IP: AnnouncedIP,
-            event:'CREATE_PIPE',
-            Dir:'12',
-            orderingKey:'8',
-          });
-        } 
       }
       if(msg.event==='CONNECT_PIPE'&&msg.IP!==AnnouncedIP){
         message.ack();
-        if(Pipe1===undefined&&msg.Dir ==='21'){
-          Pipe1 = await router1.createPipeTransport({
-            listenIp: 
-            {
-              ip: '0.0.0.0', // replace with relevant IP address
-              announcedIp: AnnouncedIP,
-            },
-            enableRtx: true,
-            enableSrtp: true,
-          })
-          Pipe1.appData['forPipe']=true
-          Pipe1.appData['Connect']=false
-          Pipe1.appData['Dir']=msg.Dir
-          addTransport(Pipe1, roomName, false,false)
-        }
-        if(Pipe2===undefined&&msg.Dir ==='12'){
-          Pipe2 = await router1.createPipeTransport({
-            listenIp: 
-            {
-              ip: '0.0.0.0', // replace with relevant IP address
-              announcedIp: AnnouncedIP,
-            },
-            enableRtx: true,
-            enableSrtp: true,
-          })
-          Pipe2.appData['forPipe']=true
-          Pipe2.appData['Connect']=false
-          Pipe2.appData['Dir']=msg.Dir
-          addTransport(Pipe2, roomName, false,false)
-        }
         const port = parseInt(msg.PORT)
         if(msg.Dir === '21'){
           const transport = getTransport(socket.id,true,msg.Dir)
           console.log('connecting Pipe1')
           await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
-          // transport.Pipe.Connect = true
-          console.log('connecting Pipe1 successful',transport.appData)
-        }
-        else{
-          const transport = getTransport(socket.id,true,msg.Dir)
-          console.log('connecting Pipe2')
-          await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
-          // transport.Pipe.Connect = true
-          console.log('connecting Pipe2 successful',transport.appData)
-        }
-        console.log('connect successful')
-        if(msg.Dir === '21'){
           publishMessage({
             Topic:topicName, 
             data:"can Produce",
@@ -655,14 +599,17 @@ connections.on('connection', async socket => {
             orderingKey:'5',
           });
         }else{
+          const transport = getTransport(socket.id,true,msg.Dir)
+          console.log('connecting Pipe2')
+          await transport.connect({ip: msg.IP, port: port,srtpParameters:{cryptoSuite:msg.SRTP_cryptoSuite,keyBase64:msg.SRTP_keyBase64}});
           publishMessage({
             Topic:topicName, 
             data:"Connect Pipe",
             IP: AnnouncedIP,
-            PORT:Pipe2.tuple.localPort.toString(),
+            PORT:transport.tuple.localPort.toString(),
             event:'CONNECT_PIPE',
-            SRTP_cryptoSuite :Pipe2.srtpParameters.cryptoSuite,
-            SRTP_keyBase64: Pipe2.srtpParameters.keyBase64,
+            SRTP_cryptoSuite :transport.srtpParameters.cryptoSuite,
+            SRTP_keyBase64: transport.srtpParameters.keyBase64,
             Dir:'12',
             orderingKey:'10',
           });
@@ -670,14 +617,19 @@ connections.on('connection', async socket => {
       }
       if(msg.event==='PIPE_CONSUME'&&msg.IP!==AnnouncedIP){
         message.ack();
-        // console.log('PIPE_CONSUME event!!!!',JSON.parse(msg.data));
         if(msg.Dir==='21'){
-          pipeproducer1 = await Pipe1.produce({
+          let pipetransport = Pipetransports.find(transports => (
+            !transports.consumer &&transports.transport.id === Pipe1ID
+          )).transport
+          pipeproducer1 = await pipetransport.produce({
             kind:'video',
             rtpParameters:JSON.parse(msg.data),
           })
         }else{
-          pipeproducer2 = await Pipe2.produce({
+          let pipetransport = Pipetransports.find(transports => (
+            !transports.consumer &&transports.transport.id === Pipe2ID
+          )).transport
+          pipeproducer2 = await pipetransport.produce({
             kind:'video',
             rtpParameters:JSON.parse(msg.data),
           })
@@ -700,26 +652,30 @@ connections.on('connection', async socket => {
         console.log('PIPE_PRODUCE Event');
         try {
           if(msg.Dir==='21'){
-            pipeconsumer1 = await Pipe1.consume({
+            let pipetransport = Pipetransports.find(transports => (
+              transports.consumer &&transports.transport.id === Pipe1ID
+            )).transport
+            pipeconsumer1 = await pipetransport.consume({
               producerId: Producer.id,
               rtpCapabilities,
               kind: 'video',
               paused: true
             })
           }else{
-            pipeconsumer2 = await Pipe2.consume({
+            let pipetransport = Pipetransports.find(transports => (
+              transports.consumer && transports.transport.id === Pipe2ID
+            )).transport
+            pipeconsumer2 = await pipetransport.consume({
               producerId: Producer.id,
               rtpCapabilities,
               kind: 'video',
               paused: true
-          })
+            })
           }
-            
         } catch (error) {
             console.error('video consume failed', error,msg.Dir)
             return
         }
-        // console.log(pipeconsumer.rtpParameters)
         publishMessage({
           Topic:topicName, 
           data:msg.Dir==='21'?JSON.stringify(pipeconsumer1.rtpParameters):JSON.stringify(pipeconsumer2.rtpParameters),
@@ -752,8 +708,43 @@ connections.on('connection', async socket => {
         console.log(`${messageCount} message(s) received.`);
       }, 1 * 1000);
     })
+    const CreatePipeTranports = async(Dir)=> {
+      return new Promise(async (resolve, reject) => {
+        try{
+          let Pipe = await router1.createPipeTransport({
+            listenIp: 
+            {
+              ip: '0.0.0.0', // replace with relevant IP address
+              announcedIp: AnnouncedIP,
+            },
+            enableRtx: true,
+            enableSrtp: true,
+          })
+          Pipe.appData['forPipe']=true
+          Pipe.appData['Connect']=false
+          Pipe.appData['Dir']=Dir
+          
+          console.log("transport ",Pipe.id)
+          console.log("Tuple ",Pipe.tuple)
+          console.log("appData ",Pipe.appData)
+          Pipe.on('dtlsstatechange', dtlsState => {
+            if (dtlsState === 'closed') {
+              Pipe.close()
+            }
+          })
+    
+          Pipe.on('close', () => {
+            console.log('transport closed')
+          })
+    
+          resolve(Pipe)
+        }catch (error) {
+          reject(error)
+        }
+      })
+      
+    }
     informConsumers(roomName, socket.id, Producer.id,false)
-    callback(Pipe1)
   })
 })
 

@@ -72,7 +72,7 @@ const flowControl = {
   setMaxOutreadyElementCount: 5,
   maxExtensionMinutes: 1,
 }
-const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
+// const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
 
 async function publishMessage(customAttributes) {
   const dataBuffer = Buffer.from(customAttributes.data);
@@ -80,9 +80,9 @@ async function publishMessage(customAttributes) {
     setMaxOutreadyElementCount: 5,
     messageOrdering: true,
   };
-  console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.Dir)
+  // console.log('Message Out: ',customAttributes.event,customAttributes.IP,customAttributes.Dir)
   const messageId = await pub.topic(customAttributes.Topic,publishOptions).publishMessage({data: dataBuffer, attributes: customAttributes})
-  console.log(`Message ${messageId} published.`);
+  console.log(`Message ${messageId} published.`,customAttributes.event,customAttributes.IP,customAttributes.Dir);
 }
 
 const createWorker = async () => {
@@ -540,6 +540,7 @@ connections.on('connection', async socket => {
     let pipeconsumer1,pipeproducer1
     let pipeconsumer2,pipeproducer2
     console.log('PipeOut Dir :',Producer.consumer)
+    const subscription = sub.subscription(subscriptionName,{ flowControl: flowControl });
     subscription.on(`message`, async(message) => {
       let msg = message.attributes
       let messageCount = 0;
@@ -701,12 +702,15 @@ connections.on('connection', async socket => {
         pipeconsumers = removeItems(pipeconsumers, msg.socketID, 'consumer')
       }
 
-      messageCount+=1
+      const Counting = message=>{
+        messageCount+=1
+      }
+      subscription.removeListener('message', Counting);
       console.log('Message:',incoming.IP,',',incoming.Port)
-      setTimeout(() => {
-        // subscription.removeListener('message', messageHandler);
-        console.log(`${messageCount} message(s) received.`);
-      }, 1 * 1000);
+      // setTimeout(() => {
+      //   // subscription.removeListener('message', messageHandler);
+      //   console.log(`${messageCount} message(s) received.`);
+      // }, 1 * 1000);
     })
     const CreatePipeTranports = async(Dir)=> {
       return new Promise(async (resolve, reject) => {

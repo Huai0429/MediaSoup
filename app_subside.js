@@ -179,6 +179,7 @@ connections.on('connection', async socket => {
       data:"Create pipe transport",
       IP: AnnouncedIP,
       event:'CREATE_PIPE',
+      socketID:socket.id,
       Dir:'21',
       orderingKey:'1',
       });
@@ -279,11 +280,11 @@ connections.on('connection', async socket => {
       })
   })
 
-  const addTransport = (transport, roomName, consumer) => {
+  const addTransport = (transport, roomName, consumer,socketID) => {
     if(transport.appData.forPipe){
       Pipetransports = [
         ...Pipetransports,
-        { socketId: socket.id, transport, roomName,appData:transport.appData,consumer}
+        { socketId: socket.id, transport, roomName,appData:transport.appData,consumer,socketID}
       ]
     }else{
       transports = [
@@ -320,6 +321,17 @@ connections.on('connection', async socket => {
   }
 
   const addPipe = (producer,consumer, roomName,site,Dir,Port,socketID) => {
+    peers[socketID] = {
+      socket,
+      roomName,           // Name for the Router this Peer joined
+      transports: [],
+      pipeproducers: [],
+      pipeconsumers: [],
+      peerDetails: {
+        name: '',
+        isAdmin: false,   // Is this Peer the Admin?
+      }
+    }
     pipeproducers = [
       ...pipeproducers,
       { socketId: socketID, producer, roomName, site, Dir,Port}
@@ -330,19 +342,19 @@ connections.on('connection', async socket => {
     ]
 
     if(producer===undefined){
-      peers[socket.id] = {
-        ...peers[socket.id],
+      peers[socketID] = {
+        ...peers[socketID],
         pipeconsumers: [
-          ...peers[socket.id].pipeconsumers,
+          ...peers[socketID].pipeconsumers,
           consumer.id,
         ]
       }
     }
     if(consumer===undefined){
-      peers[socket.id] = {
-        ...peers[socket.id],
+      peers[socketID] = {
+        ...peers[socketID],
         pipeproducers: [
-          ...peers[socket.id].pipeproducers,
+          ...peers[socketID].pipeproducers,
           producer.id,
         ],
       }
@@ -389,7 +401,7 @@ connections.on('connection', async socket => {
     if(PipeorNot===true){
       pipeproducers.forEach(producerData => {
         if (producerData.socketId !== socketId && producerData.roomName === roomName) {
-          const producerSocket = socket
+          const producerSocket = Object.keys(peers).length>1?peers[producerData.socketId].socket:socket
           // use socket to send producer id to producer
           producerSocket.emit('new-producer', { producerId: id })
         }
@@ -552,7 +564,7 @@ connections.on('connection', async socket => {
           transport => {
             // add transport to Peer's properties
             if(msg.Dir === '21'){
-              addTransport(transport, roomName, false)
+              addTransport(transport, roomName, false,msg.socketID)
               Pipe1ID = transport.id
               publishMessage({
                 Topic:topicName, 
@@ -566,13 +578,14 @@ connections.on('connection', async socket => {
                 orderingKey:'3',
               });
             }else{
-              addTransport(transport, roomName, true)
+              addTransport(transport, roomName, true,msg.socketID)
               Pipe2ID = transport.id
               publishMessage({
                 Topic:topicName, 
                 data:"Create pipe transport",
                 IP: AnnouncedIP,
                 event:'CREATE_PIPE',
+                socketID:socket.id,
                 Dir:'12',
                 orderingKey:'8',
               });
@@ -595,6 +608,7 @@ connections.on('connection', async socket => {
             data:"can Produce",
             IP: AnnouncedIP,
             event:'PIPE_PRODUCE',
+            socketID: socket.id,
             producerId:Producer.id,
             Dir:'21',
             orderingKey:'5',
@@ -620,7 +634,7 @@ connections.on('connection', async socket => {
         message.ack();
         if(msg.Dir==='21'){
           let pipetransport = Pipetransports.find(transports => (
-            !transports.consumer &&transports.transport.id === Pipe1ID
+            !transports.consumer &&transports.socketID === msg.socketID
           )).transport
           pipeproducer1 = await pipetransport.produce({
             kind:'video',
@@ -628,7 +642,7 @@ connections.on('connection', async socket => {
           })
         }else{
           let pipetransport = Pipetransports.find(transports => (
-            !transports.consumer &&transports.transport.id === Pipe2ID
+            !transports.consumer &&transports.socketID === msg.socketID
           )).transport
           pipeproducer2 = await pipetransport.produce({
             kind:'video',
@@ -654,7 +668,7 @@ connections.on('connection', async socket => {
         try {
           if(msg.Dir==='21'){
             let pipetransport = Pipetransports.find(transports => (
-              transports.consumer &&transports.transport.id === Pipe1ID
+              transports.consumer &&transports.socketID === msg.socketID
             )).transport
             pipeconsumer1 = await pipetransport.consume({
               producerId: Producer.id,
@@ -664,7 +678,7 @@ connections.on('connection', async socket => {
             })
           }else{
             let pipetransport = Pipetransports.find(transports => (
-              transports.consumer && transports.transport.id === Pipe2ID
+              transports.consumer && transports.socketID === msg.socketID
             )).transport
             pipeconsumer2 = await pipetransport.consume({
               producerId: Producer.id,
@@ -706,7 +720,6 @@ connections.on('connection', async socket => {
         messageCount+=1
       }
       subscription.removeListener('message', Counting);
-      console.log('Message:',incoming.IP,',',incoming.Port)
       // setTimeout(() => {
       //   // subscription.removeListener('message', messageHandler);
       //   console.log(`${messageCount} message(s) received.`);
